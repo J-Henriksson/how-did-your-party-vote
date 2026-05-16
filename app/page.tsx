@@ -9,7 +9,7 @@ export default function Home() {
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
 
   function handleSelect(party: string | null) {
-    setSelectedParty(prev => (prev === party ? null : party));
+    setSelectedParty(prev => (party !== null && prev === party ? null : party));
   }
 
   return (
@@ -18,8 +18,8 @@ export default function Home() {
         <h1 className="text-4xl font-bold tracking-tight mb-3">
           Hur röstade ditt parti?
         </h1>
-        <p className="text-gray-400 text-lg max-w-xl mx-auto">
-          Politiker säger en sak och röstar en annan. Här ser du exakt hur varje parti röstade — ingen spin, bara data.
+        <p className="text-gray-400 text-lg max-w-xl mx-auto">Politiker säger en sak och röstar en annan. Här ser du exakt hur varje parti röstade.
+          
         </p>
       </header>
 

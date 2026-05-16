@@ -73,7 +73,7 @@ export default function Hemicycle({ selectedParty, onSelectParty }: HemicyclePro
               fill={seat.color}
               opacity={dimmed ? 0.15 : 1}
               style={{ transition: "opacity 0.25s", cursor: "pointer" }}
-              onClick={e => { e.stopPropagation(); onSelectParty(seat.party === selectedParty ? null : seat.party); }}
+              onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
             />
           );
         })}
