@@ -2,7 +2,7 @@ import type { AggregatedVote, AllPartyBreakdown, VotePoint } from "./types";
 
 const BASE = "https://data.riksdagen.se";
 
-function currentSession(): string {
+export function currentSession(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -15,12 +15,17 @@ function monthsAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function sessionStart(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const startYear = month >= 10 ? year : year - 1;
-  return `${startYear}-10-01`;
+function sessionStartDate(session: string): string {
+  return `${session.split("/")[0]}-10-01`;
+}
+
+function sessionEndDate(session: string): string {
+  const startYear = parseInt(session.split("/")[0]);
+  const endYear = startYear + 1;
+  // If the session's closing (July of end year) is in the future, it's the current session
+  if (new Date() < new Date(`${endYear}-07-01`)) return monthsAgo(2);
+  // Past session: cut off before end-of-session acklamation period
+  return `${endYear}-04-30`;
 }
 
 interface Betankande {
@@ -29,12 +34,8 @@ interface Betankande {
   datum: string;
 }
 
-
-async function fetchBetankanden(): Promise<Betankande[]> {
-  const rm = currentSession();
-  const tom = monthsAgo(2);
-  const from = sessionStart();
-  const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${rm}&utformat=json&antal=20&from=${from}&tom=${tom}`;
+async function fetchBetankanden(session: string): Promise<Betankande[]> {
+  const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${session}&utformat=json&antal=100&from=${sessionStartDate(session)}&tom=${sessionEndDate(session)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`dokumentlista: ${res.status}`);
   const data = await res.json();
@@ -63,18 +64,6 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
       titel: bet.titel,
       datum: bet.datum,
     }));
-}
-
-let cachedVotePoints: VotePoint[] | null = null;
-
-export async function fetchRecentVotePoints(): Promise<VotePoint[]> {
-  if (cachedVotePoints) return cachedVotePoints;
-  const betankanden = await fetchBetankanden();
-  const arrays = await Promise.all(betankanden.map(fetchVotePoints));
-  const all = arrays.flat();
-  all.sort((a, b) => b.datum.localeCompare(a.datum));
-  cachedVotePoints = all;
-  return all;
 }
 
 // Cache for full all-party vote breakdowns, keyed by votering_id
@@ -121,20 +110,21 @@ async function fetchVoteForParty(point: VotePoint, party: string): Promise<Aggre
   };
 }
 
-// Cache of streamed results per party — makes re-selection instant
+// Caches keyed by session
 const streamCache = new Map<string, AggregatedVote[]>();
-
-let allVotesCache: AggregatedVote[] | null = null;
+const allVotesCache = new Map<string, AggregatedVote[]>();
 
 export function streamAllVotes(
+  session: string,
   onVote: (vote: AggregatedVote) => void,
   onDone: () => void,
   signal: AbortSignal
 ): void {
-  if (allVotesCache) {
+  if (allVotesCache.has(session)) {
+    const cached = allVotesCache.get(session)!;
     setTimeout(() => {
       if (signal.aborted) return;
-      for (const v of allVotesCache!) onVote(v);
+      for (const v of cached) onVote(v);
       onDone();
     }, 0);
     return;
@@ -143,7 +133,7 @@ export function streamAllVotes(
   (async () => {
     const collected: AggregatedVote[] = [];
     try {
-      const betankanden = await fetchBetankanden();
+      const betankanden = await fetchBetankanden(session);
       if (signal.aborted) return;
       const votePointArrays = await Promise.all(betankanden.map(fetchVotePoints));
       if (signal.aborted) return;
@@ -151,7 +141,7 @@ export function streamAllVotes(
       if (allPoints.length === 0) { onDone(); return; }
 
       let remaining = allPoints.length;
-      const finish = () => { if (--remaining === 0) { allVotesCache = collected; onDone(); } };
+      const finish = () => { if (--remaining === 0) { allVotesCache.set(session, collected); onDone(); } };
 
       for (const point of allPoints) {
         fetchAllPartyBreakdown(point.votering_id)
@@ -181,12 +171,14 @@ export function streamAllVotes(
 
 export function streamPartyVotes(
   party: string,
+  session: string,
   onVote: (vote: AggregatedVote) => void,
   onDone: () => void,
   signal: AbortSignal
 ): void {
-  if (streamCache.has(party)) {
-    const cached = streamCache.get(party)!;
+  const cacheKey = `${session}:${party}`;
+  if (streamCache.has(cacheKey)) {
+    const cached = streamCache.get(cacheKey)!;
     setTimeout(() => {
       if (signal.aborted) return;
       for (const v of cached) onVote(v);
@@ -198,7 +190,7 @@ export function streamPartyVotes(
   (async () => {
     const collected: AggregatedVote[] = [];
     try {
-      const betankanden = await fetchBetankanden();
+      const betankanden = await fetchBetankanden(session);
       if (signal.aborted) return;
 
       const votePointArrays = await Promise.all(betankanden.map(fetchVotePoints));
@@ -210,7 +202,7 @@ export function streamPartyVotes(
       let remaining = allPoints.length;
       const finish = () => {
         if (--remaining === 0) {
-          streamCache.set(party, collected);
+          streamCache.set(cacheKey, collected);
           onDone();
         }
       };

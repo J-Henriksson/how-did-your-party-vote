@@ -3,12 +3,26 @@
 import { useState } from "react";
 import Hemicycle from "@/components/Hemicycle";
 import VoteList from "@/components/VoteList";
-import { fetchAllPartyBreakdown } from "@/lib/api";
+import { currentSession, fetchAllPartyBreakdown } from "@/lib/api";
 import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
 
+const SESSIONS = ["2025/26", "2024/25", "2023/24"];
+
 export default function Home() {
+  const [activeSessions, setActiveSessions] = useState<Set<string>>(() => new Set([currentSession()]));
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
+
+  function toggleSession(s: string) {
+    setActiveSessions(prev => {
+      if (prev.has(s) && prev.size === 1) return prev; // keep at least one
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+    setSelectedVoteId(null);
+    setBreakdown(null);
+  }
 
   async function handleSelectVote(vote: AggregatedVote) {
     if (selectedVoteId === vote.votering_id) {
@@ -27,9 +41,28 @@ export default function Home() {
         <h1 className="text-4xl font-bold tracking-tight mb-3">
           Hur röstade ditt parti?
         </h1>
-        <p className="text-gray-400 text-lg max-w-xl mx-auto">
-          Klicka på en votering — hemicykeln visar hur varje parti röstade.
+        <p className="text-gray-400 text-lg max-w-xl mx-auto mb-5">
+          Politiker säger en sak och röstar en annan. Här ser du exakt hur varje parti röstade.
         </p>
+        <div className="flex justify-center gap-2">
+          {SESSIONS.map(s => {
+            const active = activeSessions.has(s);
+            return (
+              <button
+                key={s}
+                onClick={() => toggleSession(s)}
+                className="px-4 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 cursor-pointer"
+                style={{
+                  backgroundColor: active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                  color: active ? "#fff" : "#6b7280",
+                  border: `1px solid ${active ? "rgba(255,255,255,0.25)" : "transparent"}`,
+                }}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <Hemicycle
@@ -39,6 +72,7 @@ export default function Home() {
       />
 
       <VoteList
+        sessions={[...activeSessions]}
         selectedVoteId={selectedVoteId}
         onSelectVote={handleSelectVote}
       />

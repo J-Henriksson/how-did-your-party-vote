@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { streamAllVotes, streamPartyVotes } from "@/lib/api";
 import type { AggregatedVote } from "@/lib/types";
 import { PARTY_MAP } from "@/constants/parties";
@@ -8,12 +8,13 @@ import { COMMITTEES, committeeFromDokId } from "@/constants/committees";
 import VoteCard from "./VoteCard";
 
 interface VoteListProps {
+  sessions: string[];
   partyCode?: string;
   selectedVoteId?: string | null;
   onSelectVote?: (vote: AggregatedVote) => void;
 }
 
-export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: VoteListProps) {
+export default function VoteList({ sessions, partyCode, selectedVoteId, onSelectVote }: VoteListProps) {
   const [votes, setVotes] = useState<AggregatedVote[]>([]);
   const [done, setDone] = useState(false);
   const [query, setQuery] = useState("");
@@ -26,23 +27,30 @@ export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: Vo
     setActiveCommittees(new Set());
     const controller = new AbortController();
 
+    const seen = new Set<string>();
+    let pending = sessions.length;
+
     const onVote = (vote: AggregatedVote) => {
+      if (seen.has(vote.votering_id)) return;
+      seen.add(vote.votering_id);
       setVotes(prev => {
         const next = [...prev, vote];
         next.sort((a, b) => b.datum.localeCompare(a.datum));
         return next;
       });
     };
-    const onDone = () => setDone(true);
+    const onDoneOne = () => { if (--pending === 0) setDone(true); };
 
-    if (partyCode) {
-      streamPartyVotes(partyCode, onVote, onDone, controller.signal);
-    } else {
-      streamAllVotes(onVote, onDone, controller.signal);
+    for (const session of sessions) {
+      if (partyCode) {
+        streamPartyVotes(partyCode, session, onVote, onDoneOne, controller.signal);
+      } else {
+        streamAllVotes(session, onVote, onDoneOne, controller.signal);
+      }
     }
 
     return () => controller.abort();
-  }, [partyCode]);
+  }, [partyCode, sessions.slice().sort().join(",")]);
 
   // Committees present in the loaded votes, in the order they appear
   const availableCommittees = useMemo(() => {
@@ -58,7 +66,7 @@ export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: Vo
     const q = query.trim().toLowerCase();
     return votes.filter(v => {
       if (activeCommittees.size > 0 && !activeCommittees.has(committeeFromDokId(v.beteckning))) return false;
-      if (q && !v.rubrik.toLowerCase().includes(q) && !v.titel.toLowerCase().includes(q)) return false;
+      if (q && !v.rubrik.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [votes, query, activeCommittees]);
@@ -70,6 +78,30 @@ export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: Vo
       return next;
     });
   }
+
+  const [showDropdown, setShowDropdown] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        inputRef.current?.contains(e.target as Node) ||
+        dropdownRef.current?.contains(e.target as Node)
+      ) return;
+      setShowDropdown(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const wordMatch = (text: string) =>
+      text.toLowerCase().split(/[\s\-–,;:.!?()\[\]"']+/).some(w => w.length > 0 && w.startsWith(q));
+    return votes.filter(v => wordMatch(v.rubrik)).slice(0, 6);
+  }, [votes, query]);
 
   const party = partyCode ? PARTY_MAP[partyCode] : undefined;
   const loading = !done && votes.length === 0;
@@ -87,18 +119,44 @@ export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: Vo
           <span className="text-xs text-gray-600">{filtered.length} / {votes.length} voteringar</span>
         )}
       </div>
-      <p className="text-sm text-gray-500 mb-5">Riksmötet 2025/26</p>
+      <p className="text-sm text-gray-500 mb-5">Riksmötet {sessions.slice().sort().reverse().join(" · ")}</p>
 
       {/* Search + filters */}
       {votes.length > 0 && (
         <div className="flex flex-col gap-3 mb-6">
-          <input
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Sök bland voteringar…"
-            className="w-full max-w-sm rounded-lg px-3 py-2 text-sm bg-white/5 text-white placeholder-gray-600 border border-white/10 focus:outline-none focus:border-white/25"
-          />
+          <div className="relative w-full max-w-sm">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setShowDropdown(true); }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder="Sök bland voteringar…"
+              className="w-full rounded-lg px-3 py-2 text-sm bg-white/5 text-white placeholder-gray-600 border border-white/10 focus:outline-none focus:border-white/25"
+            />
+            {showDropdown && suggestions.length > 0 && (
+              <div
+                ref={dropdownRef}
+                className="absolute z-20 top-full mt-1 w-full rounded-lg border border-white/10 overflow-hidden shadow-xl"
+                style={{ backgroundColor: "#13151f" }}
+              >
+                {suggestions.map(v => (
+                  <button
+                    key={v.votering_id}
+                    className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                    onMouseDown={() => {
+                      onSelectVote?.(v);
+                      setQuery("");
+                      setShowDropdown(false);
+                    }}
+                  >
+                    <p className="text-sm text-white truncate">{v.rubrik || v.titel}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">{v.beteckning} · {v.datum}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {availableCommittees.length > 1 && (
             <div className="flex flex-wrap gap-2">
               {availableCommittees.map(({ code, label }) => {
