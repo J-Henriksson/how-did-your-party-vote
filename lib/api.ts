@@ -132,40 +132,55 @@ export function streamAllVotes(
 
   (async () => {
     const collected: AggregatedVote[] = [];
+    let totalPoints = 0;
+    let completedPoints = 0;
+    let pointsFinalised = false;
+
+    const checkDone = () => {
+      if (pointsFinalised && completedPoints === totalPoints) {
+        allVotesCache.set(session, collected);
+        // Only notify the UI if the user hasn't switched away
+        if (!signal.aborted) onDone();
+      }
+    };
+
+    const startBreakdownFetch = (point: VotePoint) => {
+      fetchAllPartyBreakdown(point.votering_id)
+        .then(breakdown => {
+          let ja = 0, nej = 0, avstar = 0, franvarande = 0;
+          for (const b of Object.values(breakdown)) {
+            ja += b.ja; nej += b.nej; avstar += b.avstar; franvarande += b.franvarande;
+          }
+          const vote: AggregatedVote = {
+            votering_id: point.votering_id,
+            beteckning: point.dok_id,
+            rubrik: point.rubrik,
+            titel: point.titel,
+            datum: point.datum,
+            ja, nej, avstar, franvarande,
+          };
+          collected.push(vote);
+          if (!signal.aborted) onVote(vote);
+        })
+        .catch(() => {})
+        .finally(() => { completedPoints++; checkDone(); });
+    };
+
     try {
       const betankanden = await fetchBetankanden(session);
-      if (signal.aborted) return;
-      const votePointArrays = await Promise.all(betankanden.map(fetchVotePoints));
-      if (signal.aborted) return;
-      const allPoints = votePointArrays.flat();
-      if (allPoints.length === 0) { onDone(); return; }
 
-      let remaining = allPoints.length;
-      const finish = () => { if (--remaining === 0) { allVotesCache.set(session, collected); onDone(); } };
+      // Always process everything regardless of abort so the cache is fully
+      // populated — switching back to this session will then be instant.
+      await Promise.all(betankanden.map(async bet => {
+        const points = await fetchVotePoints(bet);
+        totalPoints += points.length;
+        for (const point of points) startBreakdownFetch(point);
+      }));
 
-      for (const point of allPoints) {
-        fetchAllPartyBreakdown(point.votering_id)
-          .then(breakdown => {
-            if (signal.aborted) { finish(); return; }
-            let ja = 0, nej = 0, avstar = 0, franvarande = 0;
-            for (const b of Object.values(breakdown)) {
-              ja += b.ja; nej += b.nej; avstar += b.avstar; franvarande += b.franvarande;
-            }
-            const vote: AggregatedVote = {
-              votering_id: point.votering_id,
-              beteckning: point.dok_id,
-              rubrik: point.rubrik,
-              titel: point.titel,
-              datum: point.datum,
-              ja, nej, avstar, franvarande,
-            };
-            collected.push(vote);
-            onVote(vote);
-            finish();
-          })
-          .catch(finish);
-      }
-    } catch { onDone(); }
+      pointsFinalised = true;
+      if (totalPoints === 0) { if (!signal.aborted) onDone(); return; }
+      checkDone();
+    } catch { if (!signal.aborted) onDone(); }
   })();
 }
 
