@@ -1,4 +1,4 @@
-import type { AggregatedVote, AllPartyBreakdown } from "./types";
+import type { AggregatedVote, AllPartyBreakdown, VotePoint } from "./types";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -29,13 +29,6 @@ interface Betankande {
   datum: string;
 }
 
-interface VotePoint {
-  votering_id: string;
-  rubrik: string;
-  dok_id: string;
-  titel: string;
-  datum: string;
-}
 
 async function fetchBetankanden(): Promise<Betankande[]> {
   const rm = currentSession();
@@ -70,6 +63,18 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
       titel: bet.titel,
       datum: bet.datum,
     }));
+}
+
+let cachedVotePoints: VotePoint[] | null = null;
+
+export async function fetchRecentVotePoints(): Promise<VotePoint[]> {
+  if (cachedVotePoints) return cachedVotePoints;
+  const betankanden = await fetchBetankanden();
+  const arrays = await Promise.all(betankanden.map(fetchVotePoints));
+  const all = arrays.flat();
+  all.sort((a, b) => b.datum.localeCompare(a.datum));
+  cachedVotePoints = all;
+  return all;
 }
 
 // Cache for full all-party vote breakdowns, keyed by votering_id
@@ -118,6 +123,61 @@ async function fetchVoteForParty(point: VotePoint, party: string): Promise<Aggre
 
 // Cache of streamed results per party — makes re-selection instant
 const streamCache = new Map<string, AggregatedVote[]>();
+
+let allVotesCache: AggregatedVote[] | null = null;
+
+export function streamAllVotes(
+  onVote: (vote: AggregatedVote) => void,
+  onDone: () => void,
+  signal: AbortSignal
+): void {
+  if (allVotesCache) {
+    setTimeout(() => {
+      if (signal.aborted) return;
+      for (const v of allVotesCache!) onVote(v);
+      onDone();
+    }, 0);
+    return;
+  }
+
+  (async () => {
+    const collected: AggregatedVote[] = [];
+    try {
+      const betankanden = await fetchBetankanden();
+      if (signal.aborted) return;
+      const votePointArrays = await Promise.all(betankanden.map(fetchVotePoints));
+      if (signal.aborted) return;
+      const allPoints = votePointArrays.flat();
+      if (allPoints.length === 0) { onDone(); return; }
+
+      let remaining = allPoints.length;
+      const finish = () => { if (--remaining === 0) { allVotesCache = collected; onDone(); } };
+
+      for (const point of allPoints) {
+        fetchAllPartyBreakdown(point.votering_id)
+          .then(breakdown => {
+            if (signal.aborted) { finish(); return; }
+            let ja = 0, nej = 0, avstar = 0, franvarande = 0;
+            for (const b of Object.values(breakdown)) {
+              ja += b.ja; nej += b.nej; avstar += b.avstar; franvarande += b.franvarande;
+            }
+            const vote: AggregatedVote = {
+              votering_id: point.votering_id,
+              beteckning: point.dok_id,
+              rubrik: point.rubrik,
+              titel: point.titel,
+              datum: point.datum,
+              ja, nej, avstar, franvarande,
+            };
+            collected.push(vote);
+            onVote(vote);
+            finish();
+          })
+          .catch(finish);
+      }
+    } catch { onDone(); }
+  })();
+}
 
 export function streamPartyVotes(
   party: string,

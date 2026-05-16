@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { PARTIES, PARTY_MAP } from "@/constants/parties";
+import type { AllPartyBreakdown } from "@/lib/types";
 
 interface Seat {
   x: number;
   y: number;
   color: string;
   party: string;
+  partyIndex: number;
 }
 
 const ROW_COUNTS = [29, 37, 44, 51, 57, 63, 68];
@@ -16,7 +18,6 @@ const SEAT_R = 7;
 const CX = 400;
 const CY = 400;
 
-// Cumulative angle fractions per party (left → right political order)
 const PARTY_ANGLES = (() => {
   const result: Array<{ code: string; start: number; end: number }> = [];
   let cum = 0;
@@ -37,16 +38,19 @@ function partyAtFraction(fraction: number): string {
 
 function buildSeats(): Seat[] {
   const seats: Seat[] = [];
+  const partyCounts: Record<string, number> = {};
   for (let row = 0; row < ROW_COUNTS.length; row++) {
     const count = ROW_COUNTS[row];
     const r = ROW_RADII[row];
     for (let i = 0; i < count; i++) {
-      const fraction = i / (count - 1); // 0 = left, 1 = right
+      const fraction = i / (count - 1);
       const theta = Math.PI - fraction * Math.PI;
       const x = Math.round((CX + r * Math.cos(theta)) * 100) / 100;
       const y = Math.round((CY - r * Math.sin(theta)) * 100) / 100;
       const code = partyAtFraction(fraction);
-      seats.push({ x, y, color: PARTY_MAP[code]?.color ?? "#888", party: code });
+      const partyIndex = partyCounts[code] ?? 0;
+      partyCounts[code] = partyIndex + 1;
+      seats.push({ x, y, color: PARTY_MAP[code]?.color ?? "#888", party: code, partyIndex });
     }
   }
   return seats;
@@ -54,12 +58,27 @@ function buildSeats(): Seat[] {
 
 const ALL_SEATS = buildSeats();
 
+function seatOpacity(seat: Seat, breakdown: AllPartyBreakdown | null, selectedParty: string | null): number {
+  if (breakdown) {
+    const b = breakdown[seat.party];
+    if (!b) return 0.12;
+    const { ja, nej, avstar } = b;
+    if (seat.partyIndex < ja) return 1;
+    if (seat.partyIndex < ja + nej) return 0.12;
+    if (seat.partyIndex < ja + nej + avstar) return 0.35;
+    return 0.12;
+  }
+  if (selectedParty !== null && seat.party !== selectedParty) return 0.15;
+  return 1;
+}
+
 interface HemicycleProps {
   selectedParty: string | null;
   onSelectParty: (party: string | null) => void;
+  breakdown: AllPartyBreakdown | null;
 }
 
-export default function Hemicycle({ selectedParty, onSelectParty }: HemicycleProps) {
+export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: HemicycleProps) {
   const [hoveredParty, setHoveredParty] = useState<string | null>(null);
   const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
 
@@ -73,28 +92,23 @@ export default function Hemicycle({ selectedParty, onSelectParty }: HemicyclePro
         onClick={() => onSelectParty(null)}
         onMouseLeave={() => setHoveredParty(null)}
       >
-        {/* Transparent background — clears tooltip when hovering empty space */}
         <rect x="0" y="0" width="800" height="410" fill="transparent" onMouseEnter={() => setHoveredParty(null)} />
 
-        {ALL_SEATS.map((seat, i) => {
-          const dimmed = selectedParty !== null && seat.party !== selectedParty;
-          return (
-            <circle
-              key={i}
-              cx={seat.x}
-              cy={seat.y}
-              r={SEAT_R}
-              fill={seat.color}
-              opacity={dimmed ? 0.15 : 1}
-              style={{ transition: "opacity 0.25s", cursor: "pointer" }}
-              onMouseEnter={() => setHoveredParty(seat.party)}
-              onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
-            />
-          );
-        })}
+        {ALL_SEATS.map((seat, i) => (
+          <circle
+            key={i}
+            cx={seat.x}
+            cy={seat.y}
+            r={SEAT_R}
+            fill={seat.color}
+            opacity={seatOpacity(seat, breakdown, selectedParty)}
+            style={{ transition: "opacity 0.3s", cursor: "pointer" }}
+            onMouseEnter={() => setHoveredParty(seat.party)}
+            onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
+          />
+        ))}
       </svg>
 
-      {/* Hover tooltip */}
       {tooltipParty && (
         <div
           className="absolute left-1/2 -translate-x-1/2 bottom-2 px-3 py-1.5 rounded-lg text-sm font-medium pointer-events-none transition-opacity duration-150"

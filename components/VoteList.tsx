@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { streamPartyVotes } from "@/lib/api";
+import { streamAllVotes, streamPartyVotes } from "@/lib/api";
 import type { AggregatedVote } from "@/lib/types";
 import { PARTY_MAP } from "@/constants/parties";
 import { COMMITTEES, committeeFromDokId } from "@/constants/committees";
 import VoteCard from "./VoteCard";
 
 interface VoteListProps {
-  partyCode: string;
+  partyCode?: string;
+  selectedVoteId?: string | null;
+  onSelectVote?: (vote: AggregatedVote) => void;
 }
 
-export default function VoteList({ partyCode }: VoteListProps) {
+export default function VoteList({ partyCode, selectedVoteId, onSelectVote }: VoteListProps) {
   const [votes, setVotes] = useState<AggregatedVote[]>([]);
   const [done, setDone] = useState(false);
   const [query, setQuery] = useState("");
@@ -24,18 +26,20 @@ export default function VoteList({ partyCode }: VoteListProps) {
     setActiveCommittees(new Set());
     const controller = new AbortController();
 
-    streamPartyVotes(
-      partyCode,
-      vote => {
-        setVotes(prev => {
-          const next = [...prev, vote];
-          next.sort((a, b) => b.datum.localeCompare(a.datum));
-          return next;
-        });
-      },
-      () => setDone(true),
-      controller.signal
-    );
+    const onVote = (vote: AggregatedVote) => {
+      setVotes(prev => {
+        const next = [...prev, vote];
+        next.sort((a, b) => b.datum.localeCompare(a.datum));
+        return next;
+      });
+    };
+    const onDone = () => setDone(true);
+
+    if (partyCode) {
+      streamPartyVotes(partyCode, onVote, onDone, controller.signal);
+    } else {
+      streamAllVotes(onVote, onDone, controller.signal);
+    }
 
     return () => controller.abort();
   }, [partyCode]);
@@ -67,16 +71,17 @@ export default function VoteList({ partyCode }: VoteListProps) {
     });
   }
 
-  const party = PARTY_MAP[partyCode];
+  const party = partyCode ? PARTY_MAP[partyCode] : undefined;
   const loading = !done && votes.length === 0;
 
   return (
     <section className="w-full max-w-7xl mx-auto mt-10 px-6">
       {/* Header */}
       <div className="flex items-baseline gap-3 mb-1">
-        <h2 className="text-xl font-semibold" style={{ color: party?.color ?? "#fff" }}>
-          {party?.name ?? partyCode}
-        </h2>
+        {partyCode
+          ? <h2 className="text-xl font-semibold" style={{ color: party?.color ?? "#fff" }}>{party?.name ?? partyCode}</h2>
+          : <h2 className="text-xl font-semibold text-white">Alla voteringar</h2>
+        }
         {!done && <span className="text-xs text-gray-500 animate-pulse">laddar voteringar…</span>}
         {done && votes.length > 0 && (
           <span className="text-xs text-gray-600">{filtered.length} / {votes.length} voteringar</span>
@@ -131,7 +136,12 @@ export default function VoteList({ partyCode }: VoteListProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((vote, i) => (
             <div key={vote.votering_id} className="card-appear" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
-              <VoteCard vote={vote} partyCode={partyCode} />
+              <VoteCard
+                vote={vote}
+                partyCode={partyCode}
+                selected={selectedVoteId === vote.votering_id}
+                onSelect={() => onSelectVote?.(vote)}
+              />
             </div>
           ))}
           {!done && Array.from({ length: 3 }).map((_, i) => (

@@ -2,14 +2,23 @@
 
 import { useState } from "react";
 import Hemicycle from "@/components/Hemicycle";
-import PartyLegend from "@/components/PartyLegend";
 import VoteList from "@/components/VoteList";
+import { fetchAllPartyBreakdown } from "@/lib/api";
+import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
 
 export default function Home() {
-  const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
+  const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
 
-  function handleSelect(party: string | null) {
-    setSelectedParty(prev => (party !== null && prev === party ? null : party));
+  async function handleSelectVote(vote: AggregatedVote) {
+    if (selectedVoteId === vote.votering_id) {
+      setSelectedVoteId(null);
+      setBreakdown(null);
+      return;
+    }
+    setSelectedVoteId(vote.votering_id);
+    const data = await fetchAllPartyBreakdown(vote.votering_id);
+    setBreakdown(data);
   }
 
   return (
@@ -18,22 +27,21 @@ export default function Home() {
         <h1 className="text-4xl font-bold tracking-tight mb-3">
           Hur röstade ditt parti?
         </h1>
-        <p className="text-gray-400 text-lg max-w-xl mx-auto">Politiker säger en sak och röstar en annan. Här ser du exakt hur varje parti röstade.
-          
+        <p className="text-gray-400 text-lg max-w-xl mx-auto">
+          Klicka på en votering — hemicykeln visar hur varje parti röstade.
         </p>
       </header>
 
-      <Hemicycle selectedParty={selectedParty} onSelectParty={handleSelect} />
+      <Hemicycle
+        selectedParty={null}
+        onSelectParty={() => {}}
+        breakdown={breakdown}
+      />
 
-      <PartyLegend selectedParty={selectedParty} onSelect={handleSelect} />
-
-      {selectedParty ? (
-        <VoteList partyCode={selectedParty} />
-      ) : (
-        <p className="mt-10 text-gray-600 text-sm cursor-default">
-          Klicka på ett parti för att se deras voteringar.
-        </p>
-      )}
+      <VoteList
+        selectedVoteId={selectedVoteId}
+        onSelectVote={handleSelectVote}
+      />
     </main>
   );
 }

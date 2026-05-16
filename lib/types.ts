@@ -1,3 +1,11 @@
+export interface VotePoint {
+  votering_id: string;
+  rubrik: string;
+  dok_id: string;
+  titel: string;
+  datum: string;
+}
+
 export interface VoteRecord {
   hangar_id: string;
   rm: string;

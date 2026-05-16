@@ -7,7 +7,9 @@ import { fetchAllPartyBreakdown } from "@/lib/api";
 
 interface VoteCardProps {
   vote: AggregatedVote;
-  partyCode: string;
+  partyCode?: string;
+  onSelect?: () => void;
+  selected?: boolean;
 }
 
 function Pill({ label, count, color }: { label: string; count: number; color: string }) {
@@ -31,12 +33,12 @@ function dominantOutcome(ja: number, nej: number, avstar: number): { label: stri
   return null;
 }
 
-export default function VoteCard({ vote, partyCode }: VoteCardProps) {
+export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
 
-  const party = PARTY_MAP[partyCode];
+  const party = partyCode ? PARTY_MAP[partyCode] : undefined;
   const active = vote.ja + vote.nej + vote.avstar;
   const jaPct = active > 0 ? (vote.ja / active) * 100 : 0;
   const nejPct = active > 0 ? (vote.nej / active) * 100 : 0;
@@ -52,6 +54,7 @@ export default function VoteCard({ vote, partyCode }: VoteCardProps) {
     : "";
 
   async function handleExpand() {
+    onSelect?.();
     if (expanded) { setExpanded(false); return; }
     setExpanded(true);
     if (!breakdown) {
@@ -68,7 +71,10 @@ export default function VoteCard({ vote, partyCode }: VoteCardProps) {
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-3 cursor-pointer select-none transition-colors duration-150"
-      style={{ backgroundColor: expanded ? "#1e2133" : "#1a1d27" }}
+      style={{
+        backgroundColor: expanded ? "#1e2133" : "#1a1d27",
+        outline: selected ? "2px solid rgba(255,255,255,0.25)" : "none",
+      }}
       onClick={handleExpand}
     >
       {/* Header */}
@@ -123,8 +129,9 @@ export default function VoteCard({ vote, partyCode }: VoteCardProps) {
       )}
 
       <p className="text-xs text-gray-600">
-        <span style={{ color: party?.color ?? "#888" }}>{party?.name ?? partyCode}</span>
-        {" · "}
+        {partyCode && (
+          <><span style={{ color: party?.color ?? "#888" }}>{party?.name ?? partyCode}</span>{" · "}</>
+        )}
         {vote.ja + vote.nej + vote.avstar + vote.franvarande} ledamöter röstade
         <span className="ml-2 text-gray-700">{expanded ? "▲" : "▼"}</span>
       </p>
