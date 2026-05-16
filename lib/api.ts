@@ -1,4 +1,4 @@
-import type { AggregatedVote } from "./types";
+import type { AggregatedVote, AllPartyBreakdown } from "./types";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -6,7 +6,6 @@ function currentSession(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  // Riksdag session runs Oct–Jun, e.g. "2025/26" starts Oct 2025
   return month >= 10 ? `${year}/${String(year + 1).slice(2)}` : `${year - 1}/${String(year).slice(2)}`;
 }
 
@@ -14,6 +13,14 @@ function monthsAgo(n: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - n);
   return d.toISOString().slice(0, 10);
+}
+
+function sessionStart(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const startYear = month >= 10 ? year : year - 1;
+  return `${startYear}-10-01`;
 }
 
 interface Betankande {
@@ -30,19 +37,8 @@ interface VotePoint {
   datum: string;
 }
 
-function sessionStart(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  // Riksdag session starts October — use Oct 1 of starting year
-  const startYear = month >= 10 ? year : year - 1;
-  return `${startYear}-10-01`;
-}
-
 async function fetchBetankanden(): Promise<Betankande[]> {
   const rm = currentSession();
-  // Use tom = 60 days ago to skip end-of-session acklamation period
-  // where no formal votes are held
   const tom = monthsAgo(2);
   const from = sessionStart();
   const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${rm}&utformat=json&antal=20&from=${from}&tom=${tom}`;
@@ -63,8 +59,7 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
-  const forslag =
-    data?.utskottsforslag?.dokutskottsforslag?.utskottsforslag ?? [];
+  const forslag = data?.utskottsforslag?.dokutskottsforslag?.utskottsforslag ?? [];
   const arr = Array.isArray(forslag) ? forslag : [forslag];
   return arr
     .filter((f: Record<string, string>) => f.votering_id?.trim())
@@ -77,43 +72,52 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
     }));
 }
 
-async function fetchVoteForParty(
-  point: VotePoint,
-  party: string
-): Promise<AggregatedVote | null> {
-  const url = `${BASE}/votering/${point.votering_id}/json`;
+// Cache for full all-party vote breakdowns, keyed by votering_id
+const detailCache = new Map<string, AllPartyBreakdown>();
+
+export async function fetchAllPartyBreakdown(votering_id: string): Promise<AllPartyBreakdown> {
+  if (detailCache.has(votering_id)) return detailCache.get(votering_id)!;
+
+  const url = `${BASE}/votering/${votering_id}/json`;
   const res = await fetch(url);
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`votering: ${res.status}`);
   const data = await res.json();
   const records = data?.votering?.dokvotering?.votering ?? [];
-  const arr: Array<Record<string, string>> = Array.isArray(records)
-    ? records
-    : [records];
+  const arr: Array<Record<string, string>> = Array.isArray(records) ? records : [records];
 
-  const partyVotes = arr.filter(
-    r => r.parti === party && r.avser === "sakfrågan"
-  );
-  if (partyVotes.length === 0) return null;
+  const breakdown: AllPartyBreakdown = {};
+  for (const r of arr.filter(r => r.avser === "sakfrågan")) {
+    if (!breakdown[r.parti]) breakdown[r.parti] = { ja: 0, nej: 0, avstar: 0, franvarande: 0 };
+    const b = breakdown[r.parti];
+    if (r.rost === "Ja") b.ja++;
+    else if (r.rost === "Nej") b.nej++;
+    else if (r.rost === "Avstår") b.avstar++;
+    else if (r.rost === "Frånvarande") b.franvarande++;
+  }
+  detailCache.set(votering_id, breakdown);
+  return breakdown;
+}
 
-  const agg: AggregatedVote = {
+async function fetchVoteForParty(point: VotePoint, party: string): Promise<AggregatedVote | null> {
+  const breakdown = await fetchAllPartyBreakdown(point.votering_id);
+  const b = breakdown[party];
+  if (!b) return null;
+
+  return {
     votering_id: point.votering_id,
     beteckning: point.dok_id,
     rubrik: point.rubrik,
     titel: point.titel,
     datum: point.datum,
-    ja: 0,
-    nej: 0,
-    avstar: 0,
-    franvarande: 0,
+    ja: b.ja,
+    nej: b.nej,
+    avstar: b.avstar,
+    franvarande: b.franvarande,
   };
-  for (const r of partyVotes) {
-    if (r.rost === "Ja") agg.ja++;
-    else if (r.rost === "Nej") agg.nej++;
-    else if (r.rost === "Avstår") agg.avstar++;
-    else if (r.rost === "Frånvarande") agg.franvarande++;
-  }
-  return agg;
 }
+
+// Cache of streamed results per party — makes re-selection instant
+const streamCache = new Map<string, AggregatedVote[]>();
 
 export function streamPartyVotes(
   party: string,
@@ -121,7 +125,18 @@ export function streamPartyVotes(
   onDone: () => void,
   signal: AbortSignal
 ): void {
+  if (streamCache.has(party)) {
+    const cached = streamCache.get(party)!;
+    setTimeout(() => {
+      if (signal.aborted) return;
+      for (const v of cached) onVote(v);
+      onDone();
+    }, 0);
+    return;
+  }
+
   (async () => {
+    const collected: AggregatedVote[] = [];
     try {
       const betankanden = await fetchBetankanden();
       if (signal.aborted) return;
@@ -133,12 +148,20 @@ export function streamPartyVotes(
       if (allPoints.length === 0) { onDone(); return; }
 
       let remaining = allPoints.length;
-      const finish = () => { if (--remaining === 0) onDone(); };
+      const finish = () => {
+        if (--remaining === 0) {
+          streamCache.set(party, collected);
+          onDone();
+        }
+      };
 
       for (const point of allPoints) {
         fetchVoteForParty(point, party)
           .then(vote => {
-            if (!signal.aborted && vote) onVote(vote);
+            if (!signal.aborted && vote) {
+              collected.push(vote);
+              onVote(vote);
+            }
             finish();
           })
           .catch(finish);

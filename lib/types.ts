@@ -30,3 +30,12 @@ export interface AggregatedVote {
   avstar: number;
   franvarande: number;
 }
+
+export interface PartyVoteBreakdown {
+  ja: number;
+  nej: number;
+  avstar: number;
+  franvarande: number;
+}
+
+export type AllPartyBreakdown = Record<string, PartyVoteBreakdown>;

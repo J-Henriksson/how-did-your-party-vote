@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { PARTIES } from "@/constants/parties";
+import { useState } from "react";
+import { PARTIES, PARTY_MAP } from "@/constants/parties";
 
 interface Seat {
   x: number;
@@ -10,34 +10,43 @@ interface Seat {
   party: string;
 }
 
-// Row seat counts, inner to outer — must sum to 349
 const ROW_COUNTS = [29, 37, 44, 51, 57, 63, 68];
 const ROW_RADII  = [120, 150, 180, 210, 240, 270, 300];
 const SEAT_R = 7;
 const CX = 400;
 const CY = 400;
 
-function buildSeats(): Seat[] {
-  // Build a flat ordered list of party slots (left → right political order)
-  const slots: string[] = [];
+// Cumulative angle fractions per party (left → right political order)
+const PARTY_ANGLES = (() => {
+  const result: Array<{ code: string; start: number; end: number }> = [];
+  let cum = 0;
   for (const p of PARTIES) {
-    for (let i = 0; i < p.seats; i++) slots.push(p.code);
+    const frac = p.seats / 349;
+    result.push({ code: p.code, start: cum, end: cum + frac });
+    cum += frac;
   }
+  return result;
+})();
 
-  // Fill seats row by row (inner first), left to right within each row
+function partyAtFraction(fraction: number): string {
+  for (const pa of PARTY_ANGLES) {
+    if (fraction >= pa.start && fraction < pa.end) return pa.code;
+  }
+  return PARTY_ANGLES[PARTY_ANGLES.length - 1].code;
+}
+
+function buildSeats(): Seat[] {
   const seats: Seat[] = [];
-  let slotIdx = 0;
   for (let row = 0; row < ROW_COUNTS.length; row++) {
     const count = ROW_COUNTS[row];
     const r = ROW_RADII[row];
     for (let i = 0; i < count; i++) {
-      // θ goes from π (left) to 0 (right)
-      const theta = Math.PI - (i / (count - 1)) * Math.PI;
+      const fraction = i / (count - 1); // 0 = left, 1 = right
+      const theta = Math.PI - fraction * Math.PI;
       const x = Math.round((CX + r * Math.cos(theta)) * 100) / 100;
       const y = Math.round((CY - r * Math.sin(theta)) * 100) / 100;
-      const party = slots[slotIdx++] ?? "?";
-      const partyData = PARTIES.find(p => p.code === party);
-      seats.push({ x, y, color: partyData?.color ?? "#888", party });
+      const code = partyAtFraction(fraction);
+      seats.push({ x, y, color: PARTY_MAP[code]?.color ?? "#888", party: code });
     }
   }
   return seats;
@@ -51,18 +60,23 @@ interface HemicycleProps {
 }
 
 export default function Hemicycle({ selectedParty, onSelectParty }: HemicycleProps) {
-  const seats = useMemo(() => ALL_SEATS, []);
+  const [hoveredParty, setHoveredParty] = useState<string | null>(null);
+  const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4">
+    <div className="w-full max-w-5xl mx-auto px-4 relative">
       <svg
         viewBox="0 0 800 410"
         className="w-full h-auto"
         aria-label="Riksdagens hemicykel"
         style={{ cursor: "pointer" }}
         onClick={() => onSelectParty(null)}
+        onMouseLeave={() => setHoveredParty(null)}
       >
-        {seats.map((seat, i) => {
+        {/* Transparent background — clears tooltip when hovering empty space */}
+        <rect x="0" y="0" width="800" height="410" fill="transparent" onMouseEnter={() => setHoveredParty(null)} />
+
+        {ALL_SEATS.map((seat, i) => {
           const dimmed = selectedParty !== null && seat.party !== selectedParty;
           return (
             <circle
@@ -73,11 +87,23 @@ export default function Hemicycle({ selectedParty, onSelectParty }: HemicyclePro
               fill={seat.color}
               opacity={dimmed ? 0.15 : 1}
               style={{ transition: "opacity 0.25s", cursor: "pointer" }}
+              onMouseEnter={() => setHoveredParty(seat.party)}
               onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
             />
           );
         })}
       </svg>
+
+      {/* Hover tooltip */}
+      {tooltipParty && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 bottom-2 px-3 py-1.5 rounded-lg text-sm font-medium pointer-events-none transition-opacity duration-150"
+          style={{ backgroundColor: tooltipParty.color + "22", color: tooltipParty.color, border: `1px solid ${tooltipParty.color}44` }}
+        >
+          {tooltipParty.name}
+          <span className="ml-2 opacity-60 font-normal">{tooltipParty.seats} mandat</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -63,8 +63,10 @@ export default function VoteList({ partyCode }: VoteListProps) {
 
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {votes.map(vote => (
-            <VoteCard key={vote.votering_id} vote={vote} partyCode={partyCode} />
+          {votes.map((vote, i) => (
+            <div key={vote.votering_id} className="card-appear" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
+              <VoteCard vote={vote} partyCode={partyCode} />
+            </div>
           ))}
           {/* Skeleton placeholders while still loading */}
           {!done && Array.from({ length: 3 }).map((_, i) => (
