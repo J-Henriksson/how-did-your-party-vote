@@ -88,7 +88,6 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
         viewBox="0 0 800 410"
         className="w-full h-auto"
         aria-label="Riksdagens hemicykel"
-        style={{ cursor: "pointer" }}
         onClick={() => onSelectParty(null)}
         onMouseLeave={() => setHoveredParty(null)}
       >
@@ -102,9 +101,8 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
             r={SEAT_R}
             fill={seat.color}
             opacity={seatOpacity(seat, breakdown, selectedParty)}
-            style={{ transition: "opacity 0.3s", cursor: "pointer" }}
+            style={{ transition: "opacity 0.3s" }}
             onMouseEnter={() => setHoveredParty(seat.party)}
-            onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
           />
         ))}
       </svg>
