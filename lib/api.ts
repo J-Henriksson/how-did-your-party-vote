@@ -69,6 +69,35 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
 // Cache for full all-party vote breakdowns, keyed by votering_id
 const detailCache = new Map<string, AllPartyBreakdown>();
 
+const summaryCache = new Map<string, string>();
+
+export async function fetchDocumentSummary(dok_id: string): Promise<string> {
+  if (summaryCache.has(dok_id)) return summaryCache.get(dok_id)!;
+
+  const url = `${BASE}/dokument/${dok_id}/json`;
+  const res = await fetch(url);
+  if (!res.ok) { summaryCache.set(dok_id, ""); return ""; }
+  const data = await res.json();
+  const html: string = data?.dokumentstatus?.dokument?.html ?? "";
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  // .Sammanfattning is the section heading — the actual summary text is in the following <p> siblings
+  const heading = doc.querySelector(".Sammanfattning");
+  const parts: string[] = [];
+  if (heading) {
+    let el = heading.nextElementSibling;
+    while (el && el.tagName === "P" && !el.className) {
+      const t = el.textContent?.trim();
+      if (t) parts.push(t);
+      el = el.nextElementSibling;
+    }
+  }
+  const text = parts.join(" ");
+
+  summaryCache.set(dok_id, text);
+  return text;
+}
+
 export async function fetchAllPartyBreakdown(votering_id: string): Promise<AllPartyBreakdown> {
   if (detailCache.has(votering_id)) return detailCache.get(votering_id)!;
 

@@ -42,7 +42,7 @@ export default function Home() {
           Hur röstade ditt parti?
         </h1>
         <p className="text-gray-400 text-lg max-w-xl mx-auto mb-5">
-          Politiker säger en sak och röstar en annan. Här ser du exakt hur varje parti röstade.
+          Politiker säger en sak men röstar för en annan. Här ser du exakt hur varje parti röstade.
         </p>
         <div className="flex justify-center gap-2">
           {SESSIONS.map(s => {

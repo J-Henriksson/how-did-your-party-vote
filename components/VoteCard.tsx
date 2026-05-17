@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
 import { PARTIES, PARTY_MAP } from "@/constants/parties";
-import { fetchAllPartyBreakdown } from "@/lib/api";
+import { fetchAllPartyBreakdown, fetchDocumentSummary } from "@/lib/api";
 
 interface VoteCardProps {
   vote: AggregatedVote;
@@ -37,6 +37,8 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
   const [expanded, setExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   const party = partyCode ? PARTY_MAP[partyCode] : undefined;
   const active = vote.ja + vote.nej + vote.avstar;
@@ -53,18 +55,23 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
       })
     : "";
 
-  async function handleExpand() {
+  function handleExpand() {
     onSelect?.();
     if (expanded) { setExpanded(false); return; }
     setExpanded(true);
+
     if (!breakdown) {
       setLoadingBreakdown(true);
-      try {
-        const data = await fetchAllPartyBreakdown(vote.votering_id);
-        setBreakdown(data);
-      } finally {
-        setLoadingBreakdown(false);
-      }
+      fetchAllPartyBreakdown(vote.votering_id)
+        .then(data => setBreakdown(data))
+        .finally(() => setLoadingBreakdown(false));
+    }
+
+    if (summary === null) {
+      setLoadingSummary(true);
+      fetchDocumentSummary(vote.beteckning)
+        .then(text => setSummary(text))
+        .finally(() => setLoadingSummary(false));
     }
   }
 
@@ -139,6 +146,12 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
       {/* All-party comparison */}
       {expanded && (
         <div className="mt-1 pt-3 border-t border-white/10 flex flex-col gap-2">
+          {loadingSummary && (
+            <div className="h-3 w-3/4 rounded animate-pulse bg-white/10 mb-3" />
+          )}
+          {!loadingSummary && summary && (
+            <p className="text-xs text-gray-400 leading-relaxed mb-3">{summary}</p>
+          )}
           <p className="text-xs text-gray-500 mb-1">Alla partiers röster</p>
           {loadingBreakdown ? (
             <div className="flex flex-col gap-2">
