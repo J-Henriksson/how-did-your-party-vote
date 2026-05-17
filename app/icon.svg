@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Outer row (r=11, center 16,29) left→right -->
+  <circle cx="5"    cy="29"   r="1.5" fill="#AF1E2D"/>
+  <circle cx="5.8"  cy="23.8" r="1.5" fill="#83CF39"/>
+  <circle cx="8.2"  cy="20.2" r="1.5" fill="#E8112D"/>
+  <circle cx="11.8" cy="17.8" r="1.5" fill="#E8112D"/>
+  <circle cx="16"   cy="17"   r="1.5" fill="#009933"/>
+  <circle cx="20.2" cy="17.8" r="1.5" fill="#52BDEC"/>
+  <circle cx="23.8" cy="20.2" r="1.5" fill="#52BDEC"/>
+  <circle cx="26.2" cy="23.8" r="1.5" fill="#DDDD00"/>
+  <circle cx="27"   cy="29"   r="1.5" fill="#DDDD00"/>
+  <!-- Inner row (r=7, center 16,29) left→right -->
+  <circle cx="9"    cy="29"   r="1.5" fill="#E8112D"/>
+  <circle cx="9.9"  cy="24.5" r="1.5" fill="#E8112D"/>
+  <circle cx="12.5" cy="21.9" r="1.5" fill="#E8112D"/>
+  <circle cx="16"   cy="22"   r="1.5" fill="#006AB3"/>
+  <circle cx="19.5" cy="21.9" r="1.5" fill="#231977"/>
+  <circle cx="22.1" cy="24.5" r="1.5" fill="#52BDEC"/>
+  <circle cx="23"   cy="29"   r="1.5" fill="#DDDD00"/>
+</svg>
