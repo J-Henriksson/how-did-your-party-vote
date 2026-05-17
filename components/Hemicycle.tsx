@@ -111,7 +111,7 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
       {tooltipParty && (
         <div
           className="absolute left-1/2 -translate-x-1/2 bottom-2 px-3 py-1.5 rounded-lg text-sm font-medium pointer-events-none transition-opacity duration-150"
-          style={{ backgroundColor: tooltipParty.color + "22", color: tooltipParty.color, border: `1px solid ${tooltipParty.color}44` }}
+          style={{ backgroundColor: tooltipParty.color + "33", color: "#fff", border: `1px solid ${tooltipParty.color}88` }}
         >
           {tooltipParty.name}
           <span className="ml-2 opacity-60 font-normal">{tooltipParty.seats} mandat</span>
