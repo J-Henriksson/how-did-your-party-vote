@@ -70,32 +70,137 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
 const detailCache = new Map<string, AllPartyBreakdown>();
 
 const summaryCache = new Map<string, string>();
+const docHtmlCache = new Map<string, Promise<string>>();
 
-export async function fetchDocumentSummary(dok_id: string): Promise<string> {
-  if (summaryCache.has(dok_id)) return summaryCache.get(dok_id)!;
+function fetchDocHtml(dok_id: string): Promise<string> {
+  if (!docHtmlCache.has(dok_id)) {
+    const p = fetch(`${BASE}/dokument/${dok_id}/json`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => (data?.dokumentstatus?.dokument?.html as string) ?? "")
+      .catch(() => "");
+    docHtmlCache.set(dok_id, p);
+  }
+  return docHtmlCache.get(dok_id)!;
+}
 
-  const url = `${BASE}/dokument/${dok_id}/json`;
-  const res = await fetch(url);
-  if (!res.ok) { summaryCache.set(dok_id, ""); return ""; }
-  const data = await res.json();
-  const html: string = data?.dokumentstatus?.dokument?.html ?? "";
+export async function fetchDocumentSummary(dok_id: string, rubrik: string): Promise<string> {
+  const cacheKey = `${dok_id}:${rubrik}`;
+  if (summaryCache.has(cacheKey)) return summaryCache.get(cacheKey)!;
 
+  const html = await fetchDocHtml(dok_id);
   const doc = new DOMParser().parseFromString(html, "text/html");
-  // .Sammanfattning is the section heading — the actual summary text is in the following <p> siblings
-  const heading = doc.querySelector(".Sammanfattning");
-  const parts: string[] = [];
+  const text = extractSectionSummary(doc, rubrik);
+
+  summaryCache.set(cacheKey, text);
+  return text;
+}
+
+function truncateSentences(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen);
+  const last = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  return last > 60 ? cut.slice(0, last + 1) : cut.slice(0, cut.lastIndexOf(" ")) + "…";
+}
+
+function normalize(s: string): string {
+  return s.replace(/­/g, "").trim().toLowerCase();
+}
+
+
+
+// Within a section's elements, find a R3/R4 subsection heading by name and return its content
+function extractSubsection(section: Element[], subheading: string): string {
+  for (let i = 0; i < section.length; i++) {
+    const el = section[i];
+    const headingEl =
+      (el.matches?.(".R3,.R4") && normalize(el.textContent ?? "") === subheading ? el : null) ??
+      el.querySelector?.(".R3,.R4");
+    if (!headingEl || normalize(headingEl.textContent ?? "") !== subheading) continue;
+
+    // Grab first content paragraph, truncated to ~2 sentences
+    for (let j = i + 1; j < section.length; j++) {
+      const next = section[j];
+      if (next.matches?.(".R3,.R4") || next.querySelector?.(".R3,.R4")) break;
+      const candidates = next.matches?.(".NormalIndent,p")
+        ? [next]
+        : Array.from(next.querySelectorAll(".NormalIndent, p"));
+      for (const p of candidates) {
+        const t = p.textContent?.trim();
+        if (t && t.length > 20) return truncateSentences(t, 280);
+      }
+    }
+  }
+  return "";
+}
+
+function extractSectionSummary(doc: Document, rubrik: string): string {
+  const target = normalize(rubrik);
+
+  const headings = Array.from(doc.querySelectorAll("h2"));
+  const heading =
+    headings.find(h => normalize(h.textContent ?? "") === target) ??
+    headings.find(h => normalize(h.textContent ?? "").includes(target)) ??
+    headings.find(h => target.includes(normalize(h.textContent ?? "").replace(/\s+/g, " ")));
+
   if (heading) {
-    let el = heading.nextElementSibling;
-    while (el && el.tagName === "P" && !el.className) {
+    // h2 may be wrapped in a <div> container — traverse from that wrapper
+    const anchor = heading.parentElement?.tagName === "DIV" ? heading.parentElement : heading;
+    const section: Element[] = [];
+    let el = anchor.nextElementSibling;
+    while (el && !el.matches("h2") && !el.querySelector("h2")) {
+      section.push(el);
+      el = el.nextElementSibling;
+    }
+
+    // What was proposed — try singular and plural subsection headings
+    const motText =
+      extractSubsection(section, "motionen") ||
+      extractSubsection(section, "motionerna") ||
+      extractSubsection(section, "yrkandena");
+    if (motText) return motText;
+
+    // Korthet box (brief outcome statement)
+    const korthText = section
+      .flatMap(el => Array.from(el.querySelectorAll(".Normalruta")))
+      .map(p => p.textContent?.trim())
+      .filter(Boolean)
+      .join(" ");
+    if (korthText) return korthText;
+
+    // Last resort: first substantial content paragraph in the section
+    for (const el of section) {
+      const candidates = el.matches?.(".NormalIndent,p") ? [el] : Array.from(el.querySelectorAll(".NormalIndent, p"));
+      for (const p of candidates) {
+        const t = p.textContent?.trim();
+        if (t && t.length > 40) return truncateSentences(t, 280);
+      }
+    }
+  }
+
+  // No h2 match — try R3/R4 subsection heading (some betänkanden nest topics under broader h2s)
+  const subHeadings = Array.from(doc.querySelectorAll(".R3, .R4"));
+  const subHeading = subHeadings.find(el => normalize(el.textContent ?? "") === target);
+  if (subHeading) {
+    let el = subHeading.nextElementSibling;
+    while (el && !el.matches(".R3,.R4,.R2") && !el.querySelector?.(".R3,.R4")) {
       const t = el.textContent?.trim();
-      if (t) parts.push(t);
+      if (t && t.length > 40) return truncateSentences(t, 280);
       el = el.nextElementSibling;
     }
   }
-  const text = parts.join(" ");
 
-  summaryCache.set(dok_id, text);
-  return text;
+  // Final fallback: betänkande-level Sammanfattning
+  const samHeading = doc.querySelector(".Sammanfattning");
+  if (samHeading) {
+    let el = samHeading.nextElementSibling;
+    while (el && el.tagName === "P" && !el.className) {
+      const t = el.textContent?.trim();
+      if (t) return truncateSentences(t, 280);
+      el = el.nextElementSibling;
+    }
+  }
+
+  return "";
 }
 
 export async function fetchAllPartyBreakdown(votering_id: string): Promise<AllPartyBreakdown> {

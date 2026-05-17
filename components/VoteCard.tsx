@@ -69,7 +69,7 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
 
     if (summary === null) {
       setLoadingSummary(true);
-      fetchDocumentSummary(vote.beteckning)
+      fetchDocumentSummary(vote.beteckning, vote.rubrik)
         .then(text => setSummary(text))
         .finally(() => setLoadingSummary(false));
     }
