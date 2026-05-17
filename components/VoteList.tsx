@@ -183,27 +183,35 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
 
       {/* Skeletons on initial load */}
       {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl p-4 h-32 animate-pulse" style={{ backgroundColor: "#1a1d27" }} />
+        <div className="flex gap-4 items-start">
+          {[0, 1, 2].map(ci => (
+            <div key={ci} className="flex-1 flex flex-col gap-4 min-w-0">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="rounded-xl p-4 h-32 animate-pulse" style={{ backgroundColor: "#1a1d27" }} />
+              ))}
+            </div>
           ))}
         </div>
       )}
 
       {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((vote, i) => (
-            <div key={vote.votering_id} className="card-appear" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
-              <VoteCard
-                vote={vote}
-                partyCode={partyCode}
-                selected={selectedVoteId === vote.votering_id}
-                onSelect={() => onSelectVote?.(vote)}
-              />
+        <div className="flex gap-4 items-start">
+          {[0, 1, 2].map(ci => (
+            <div key={ci} className="flex-1 flex flex-col gap-4 min-w-0">
+              {filtered.filter((_, i) => i % 3 === ci).map((vote, i) => (
+                <div key={vote.votering_id} className="card-appear" style={{ animationDelay: `${Math.min((ci + i * 3) * 30, 300)}ms` }}>
+                  <VoteCard
+                    vote={vote}
+                    partyCode={partyCode}
+                    selected={selectedVoteId === vote.votering_id}
+                    onSelect={() => onSelectVote?.(vote)}
+                  />
+                </div>
+              ))}
+              {!done && ci === 0 && (
+                <div className="rounded-xl p-4 h-32 animate-pulse" style={{ backgroundColor: "#1a1d27" }} />
+              )}
             </div>
-          ))}
-          {!done && Array.from({ length: 3 }).map((_, i) => (
-            <div key={`skel-${i}`} className="rounded-xl p-4 h-32 animate-pulse" style={{ backgroundColor: "#1a1d27" }} />
           ))}
         </div>
       )}

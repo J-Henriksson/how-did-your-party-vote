@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
 import { PARTIES, PARTY_MAP } from "@/constants/parties";
 import { fetchAllPartyBreakdown, fetchDocumentSummary } from "@/lib/api";
@@ -33,12 +33,27 @@ function dominantOutcome(ja: number, nej: number, avstar: number): { label: stri
   return null;
 }
 
-export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function VoteCard({ vote, partyCode, onSelect, selected = false }: VoteCardProps) {
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (!breakdown) {
+      setLoadingBreakdown(true);
+      fetchAllPartyBreakdown(vote.votering_id)
+        .then(data => setBreakdown(data))
+        .finally(() => setLoadingBreakdown(false));
+    }
+    if (summary === null) {
+      setLoadingSummary(true);
+      fetchDocumentSummary(vote.beteckning, vote.rubrik)
+        .then(text => setSummary(text))
+        .finally(() => setLoadingSummary(false));
+    }
+  }, [selected]);
 
   const party = partyCode ? PARTY_MAP[partyCode] : undefined;
   const active = vote.ja + vote.nej + vote.avstar;
@@ -57,29 +72,13 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
 
   function handleExpand() {
     onSelect?.();
-    if (expanded) { setExpanded(false); return; }
-    setExpanded(true);
-
-    if (!breakdown) {
-      setLoadingBreakdown(true);
-      fetchAllPartyBreakdown(vote.votering_id)
-        .then(data => setBreakdown(data))
-        .finally(() => setLoadingBreakdown(false));
-    }
-
-    if (summary === null) {
-      setLoadingSummary(true);
-      fetchDocumentSummary(vote.beteckning, vote.rubrik)
-        .then(text => setSummary(text))
-        .finally(() => setLoadingSummary(false));
-    }
   }
 
   return (
     <div
       className="rounded-xl p-4 flex flex-col gap-3 cursor-pointer select-none transition-colors duration-150"
       style={{
-        backgroundColor: expanded ? "#1e2133" : "#1a1d27",
+        backgroundColor: selected ? "#1e2133" : "#1a1d27",
         outline: selected ? "2px solid rgba(255,255,255,0.25)" : "none",
       }}
       onClick={handleExpand}
@@ -120,7 +119,7 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
       </div>
 
       {/* Collapsed: pills + bar give a quick numeric overview */}
-      {!expanded && (
+      {!selected && (
         <>
           <div className="flex flex-wrap gap-2">
             <Pill label="Ja" count={vote.ja} color="#22c55e" />
@@ -143,11 +142,11 @@ export default function VoteCard({ vote, partyCode, onSelect, selected }: VoteCa
           <><span style={{ color: party?.color ?? "#888" }}>{party?.name ?? partyCode}</span>{" · "}</>
         )}
         {vote.ja + vote.nej + vote.avstar + vote.franvarande} ledamöter röstade
-        <span className="ml-2 text-gray-700">{expanded ? "▲" : "▼"}</span>
+        <span className="ml-2 text-gray-700">{selected ? "▲" : "▼"}</span>
       </p>
 
       {/* Expanded: summary + per-party breakdown */}
-      {expanded && (
+      {selected && (
         <div className="pt-3 border-t border-white/10 flex flex-col gap-4">
 
           {/* 1. What the vote is about */}
