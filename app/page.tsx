@@ -10,16 +10,24 @@ const SESSIONS = ["2025/26", "2024/25", "2023/24"];
 
 export default function Home() {
   const [activeSessions, setActiveSessions] = useState<Set<string>>(() => new Set([currentSession()]));
+  const [selectedParty, setSelectedParty] = useState<string | null>(null);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
 
   function toggleSession(s: string) {
     setActiveSessions(prev => {
-      if (prev.has(s) && prev.size === 1) return prev; // keep at least one
+      if (prev.has(s) && prev.size === 1) return prev;
       const next = new Set(prev);
       next.has(s) ? next.delete(s) : next.add(s);
       return next;
     });
+    setSelectedVoteId(null);
+    setBreakdown(null);
+  }
+
+  function handleSelectParty(party: string | null) {
+    const next = party === selectedParty ? null : party;
+    setSelectedParty(next);
     setSelectedVoteId(null);
     setBreakdown(null);
   }
@@ -66,13 +74,14 @@ export default function Home() {
       </header>
 
       <Hemicycle
-        selectedParty={null}
-        onSelectParty={() => {}}
+        selectedParty={selectedParty}
+        onSelectParty={handleSelectParty}
         breakdown={breakdown}
       />
 
       <VoteList
         sessions={[...activeSessions]}
+        partyCode={selectedParty ?? undefined}
         selectedVoteId={selectedVoteId}
         onSelectVote={handleSelectVote}
       />
