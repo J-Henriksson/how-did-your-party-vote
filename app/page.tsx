@@ -43,48 +43,60 @@ export default function Home() {
     setBreakdown(data);
   }
 
+  const hemicycleProps = {
+    selectedParty,
+    onSelectParty: handleSelectParty,
+    breakdown,
+  };
+
   return (
-    <main className="flex flex-col items-center w-full pb-24">
-      <header className="w-full max-w-5xl mx-auto px-6 pt-12 pb-6 text-center">
-        <h1 className="text-4xl font-bold tracking-tight mb-3">
-          Hur röstade ditt parti?
-        </h1>
-        <p className="text-gray-400 text-lg max-w-xl mx-auto mb-5">
-          Politiker säger en sak men röstar för en annan. Här ser du exakt hur varje parti röstade.
-        </p>
-        <div className="flex justify-center gap-2">
-          {SESSIONS.map(s => {
-            const active = activeSessions.has(s);
-            return (
-              <button
-                key={s}
-                onClick={() => toggleSession(s)}
-                className="px-4 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 cursor-pointer"
-                style={{
-                  backgroundColor: active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
-                  color: active ? "#fff" : "#6b7280",
-                  border: `1px solid ${active ? "rgba(255,255,255,0.25)" : "transparent"}`,
-                }}
-              >
-                {s}
-              </button>
-            );
-          })}
+    <div className="flex h-screen overflow-hidden">
+      {/* Left pane: header + hemicycle, fixed */}
+      <div className="w-1/2 flex flex-col px-10 pt-10 pb-6 overflow-hidden">
+        <header className="mb-6 flex-shrink-0">
+          <h1 className="text-3xl font-bold tracking-tight mb-2">
+            Hur röstade ditt parti?
+          </h1>
+          <p className="text-gray-400 text-sm max-w-md mb-4">
+            Politiker säger en sak men röstar för en annan. Här ser du exakt hur varje parti röstade.
+          </p>
+          <div className="flex gap-2">
+            {SESSIONS.map(s => {
+              const active = activeSessions.has(s);
+              return (
+                <button
+                  key={s}
+                  onClick={() => toggleSession(s)}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 cursor-pointer"
+                  style={{
+                    backgroundColor: active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                    color: active ? "#fff" : "#6b7280",
+                    border: `1px solid ${active ? "rgba(255,255,255,0.25)" : "transparent"}`,
+                  }}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </header>
+
+        {/* Hemicycle fills remaining vertical space */}
+        <div className="flex-1 flex items-center min-h-0">
+          <Hemicycle {...hemicycleProps} />
         </div>
-      </header>
+      </div>
 
-      <Hemicycle
-        selectedParty={selectedParty}
-        onSelectParty={handleSelectParty}
-        breakdown={breakdown}
-      />
-
-      <VoteList
-        sessions={[...activeSessions]}
-        partyCode={selectedParty ?? undefined}
-        selectedVoteId={selectedVoteId}
-        onSelectVote={handleSelectVote}
-      />
-    </main>
+      {/* Right pane: vote list, independently scrollable */}
+      <div className="w-1/2 h-screen overflow-y-auto border-l border-white/5">
+        <VoteList
+          sessions={[...activeSessions]}
+          partyCode={selectedParty ?? undefined}
+          selectedVoteId={selectedVoteId}
+          onSelectVote={handleSelectVote}
+          columns={2}
+        />
+      </div>
+    </div>
   );
 }

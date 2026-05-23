@@ -12,9 +12,10 @@ interface VoteListProps {
   partyCode?: string;
   selectedVoteId?: string | null;
   onSelectVote?: (vote: AggregatedVote) => void;
+  columns?: number;
 }
 
-export default function VoteList({ sessions, partyCode, selectedVoteId, onSelectVote }: VoteListProps) {
+export default function VoteList({ sessions, partyCode, selectedVoteId, onSelectVote, columns = 3 }: VoteListProps) {
   const [votes, setVotes] = useState<AggregatedVote[]>([]);
   const [done, setDone] = useState(false);
   const [query, setQuery] = useState("");
@@ -116,7 +117,7 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
   const loading = !done && votes.length === 0;
 
   return (
-    <section className="w-full max-w-7xl mx-auto mt-10 px-6">
+    <section className="w-full px-6 pt-6 pb-16">
       {/* Header */}
       <div className="flex items-baseline gap-3 mb-1">
         {partyCode
@@ -209,7 +210,7 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
       {/* Skeletons on initial load */}
       {loading && (
         <div className="flex gap-4 items-start">
-          {[0, 1, 2].map(ci => (
+          {Array.from({ length: columns }, (_, ci) => (
             <div key={ci} className="flex-1 flex flex-col gap-4 min-w-0">
               {Array.from({ length: 2 }).map((_, i) => (
                 <div key={i} className="rounded-xl p-4 h-32 animate-pulse" style={{ backgroundColor: "#1a1d27" }} />
@@ -221,9 +222,9 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
 
       {!loading && (
         <div className="flex gap-4 items-start">
-          {[0, 1, 2].map(ci => (
+          {Array.from({ length: columns }, (_, ci) => (
             <div key={ci} className="flex-1 flex flex-col gap-4 min-w-0">
-              {filtered.filter((_, i) => i % 3 === ci).map((vote, i) => (
+              {filtered.filter((_, i) => i % columns === ci).map((vote, i) => (
                 <div key={vote.votering_id} className="card-appear" style={{ animationDelay: `${Math.min((ci + i * 3) * 30, 300)}ms` }}>
                   <VoteCard
                     vote={vote}
