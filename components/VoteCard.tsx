@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
+import type { AggregatedVote, AllPartyBreakdown, DocumentSummary } from "@/lib/types";
 import { PARTIES, PARTY_MAP } from "@/constants/parties";
 import { fetchAllPartyBreakdown, fetchDocumentSummary, extractProposerParty } from "@/lib/api";
 
@@ -36,7 +36,7 @@ function dominantOutcome(ja: number, nej: number, avstar: number): { label: stri
 export default function VoteCard({ vote, partyCode, onSelect, selected = false }: VoteCardProps) {
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<DocumentSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
   useEffect(() => {
@@ -150,24 +150,32 @@ export default function VoteCard({ vote, partyCode, onSelect, selected = false }
         <div className="pt-3 border-t border-white/10 flex flex-col gap-4">
 
           {/* 1. What the vote is about */}
-          <div>
-            <p className="text-xs text-gray-600 uppercase tracking-wide mb-1.5">Sammanfattning</p>
-            {loadingSummary ? (
-              <div className="flex flex-col gap-1.5">
-                <div className="h-3 w-full rounded animate-pulse bg-white/10" />
-                <div className="h-3 w-4/5 rounded animate-pulse bg-white/10" />
-                <div className="h-3 w-3/5 rounded animate-pulse bg-white/10" />
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-xs text-gray-600 uppercase tracking-wide mb-1.5">Utskottets bedömning</p>
+              {loadingSummary ? (
+                <div className="flex flex-col gap-1.5">
+                  <div className="h-3 w-full rounded animate-pulse bg-white/10" />
+                  <div className="h-3 w-4/5 rounded animate-pulse bg-white/10" />
+                  <div className="h-3 w-3/5 rounded animate-pulse bg-white/10" />
+                </div>
+              ) : summary?.committee ? (
+                <p className="text-sm text-gray-200 leading-relaxed">{summary.committee}</p>
+              ) : (
+                <p className="text-xs text-gray-600 italic">Ingen bedömning tillgänglig.</p>
+              )}
+            </div>
+            {!loadingSummary && summary?.motion && (
+              <div>
+                <p className="text-xs text-gray-600 uppercase tracking-wide mb-1.5">Ursprunglig motion</p>
+                <p className="text-xs text-gray-400 leading-relaxed">{summary.motion}</p>
               </div>
-            ) : summary ? (
-              <p className="text-sm text-gray-200 leading-relaxed">{summary}</p>
-            ) : (
-              <p className="text-xs text-gray-600 italic">Ingen sammanfattning tillgänglig.</p>
             )}
           </div>
 
           {/* 1b. Parliamentary process context */}
           {!loadingSummary && (() => {
-            const proposerParty = summary ? extractProposerParty(summary) : null;
+            const proposerParty = summary?.motion ? extractProposerParty(summary.motion) : null;
             const overallJa = vote.ja > vote.nej;
             const pb = proposerParty && breakdown ? breakdown[proposerParty] : null;
             const proposerOutcome = pb ? dominantOutcome(pb.ja, pb.nej, pb.avstar) : null;

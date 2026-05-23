@@ -1,4 +1,4 @@
-import type { AggregatedVote, AllPartyBreakdown, VotePoint } from "./types";
+import type { AggregatedVote, AllPartyBreakdown, DocumentSummary, VotePoint } from "./types";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -69,7 +69,7 @@ async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
 // Cache for full all-party vote breakdowns, keyed by votering_id
 const detailCache = new Map<string, AllPartyBreakdown>();
 
-const summaryCache = new Map<string, string>();
+const summaryCache = new Map<string, DocumentSummary>();
 const docHtmlCache = new Map<string, Promise<string>>();
 
 function fetchDocHtml(dok_id: string): Promise<string> {
@@ -96,16 +96,16 @@ export function extractProposerParty(summary: string): string | null {
   return m ? m[1] : null;
 }
 
-export async function fetchDocumentSummary(dok_id: string, rubrik: string): Promise<string> {
+export async function fetchDocumentSummary(dok_id: string, rubrik: string): Promise<DocumentSummary> {
   const cacheKey = `${dok_id}:${rubrik}`;
   if (summaryCache.has(cacheKey)) return summaryCache.get(cacheKey)!;
 
   const html = await fetchDocHtml(dok_id);
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const text = extractSectionSummary(doc, rubrik);
+  const result = extractBothSections(doc, rubrik);
 
-  summaryCache.set(cacheKey, text);
-  return text;
+  summaryCache.set(cacheKey, result);
+  return result;
 }
 
 function truncateSentences(text: string, maxLen: number): string {
@@ -146,7 +146,7 @@ function extractSubsection(section: Element[], subheading: string): string {
   return "";
 }
 
-function extractSectionSummary(doc: Document, rubrik: string): string {
+function extractBothSections(doc: Document, rubrik: string): DocumentSummary {
   const target = normalize(rubrik);
 
   const headings = Array.from(doc.querySelectorAll("h2"));
@@ -156,7 +156,6 @@ function extractSectionSummary(doc: Document, rubrik: string): string {
     headings.find(h => target.includes(normalize(h.textContent ?? "").replace(/\s+/g, " ")));
 
   if (heading) {
-    // h2 may be wrapped in a <div> container — traverse from that wrapper
     const anchor = heading.parentElement?.tagName === "DIV" ? heading.parentElement : heading;
     const section: Element[] = [];
     let el = anchor.nextElementSibling;
@@ -165,55 +164,61 @@ function extractSectionSummary(doc: Document, rubrik: string): string {
       el = el.nextElementSibling;
     }
 
-    // What was proposed — try singular and plural subsection headings
     const motText =
       extractSubsection(section, "motionen") ||
       extractSubsection(section, "motionerna") ||
       extractSubsection(section, "yrkandena");
-    if (motText) return motText;
 
-    // Korthet box (brief outcome statement)
-    const korthText = section
+    const committeeText =
+      extractSubsection(section, "utskottets ställningstagande") ||
+      extractSubsection(section, "utskottets bedömning") ||
+      extractSubsection(section, "utskottets förslag");
+
+    // Normalruta = "i korthet" box — genuine committee summary, use when no explicit subsection
+    const korthText = committeeText ? "" : section
       .flatMap(el => Array.from(el.querySelectorAll(".Normalruta")))
       .map(p => p.textContent?.trim())
       .filter(Boolean)
       .join(" ");
-    if (korthText) return korthText;
 
-    // Last resort: first substantial content paragraph in the section
+    if (committeeText || korthText || motText) {
+      return { motion: motText, committee: committeeText || korthText };
+    }
+
+    // Last resort: first substantial paragraph goes to motion (not committee — could be anything)
     for (const el of section) {
       const candidates = el.matches?.(".NormalIndent,p") ? [el] : Array.from(el.querySelectorAll(".NormalIndent, p"));
       for (const p of candidates) {
         const t = p.textContent?.trim();
-        if (t && t.length > 40) return truncateSentences(t, 280);
+        if (t && t.length > 40) return { motion: truncateSentences(t, 280), committee: "" };
       }
     }
   }
 
-  // No h2 match — try R3/R4 subsection heading (some betänkanden nest topics under broader h2s)
+  // No h2 match — try R3/R4 subsection heading (motion slot, provenance unclear)
   const subHeadings = Array.from(doc.querySelectorAll(".R3, .R4"));
   const subHeading = subHeadings.find(el => normalize(el.textContent ?? "") === target);
   if (subHeading) {
     let el = subHeading.nextElementSibling;
     while (el && !el.matches(".R3,.R4,.R2") && !el.querySelector?.(".R3,.R4")) {
       const t = el.textContent?.trim();
-      if (t && t.length > 40) return truncateSentences(t, 280);
+      if (t && t.length > 40) return { motion: truncateSentences(t, 280), committee: "" };
       el = el.nextElementSibling;
     }
   }
 
-  // Final fallback: betänkande-level Sammanfattning
+  // Final fallback: betänkande-level Sammanfattning (document-level, OK as committee)
   const samHeading = doc.querySelector(".Sammanfattning");
   if (samHeading) {
     let el = samHeading.nextElementSibling;
     while (el && el.tagName === "P" && !el.className) {
       const t = el.textContent?.trim();
-      if (t) return truncateSentences(t, 280);
+      if (t) return { motion: "", committee: truncateSentences(t, 280) };
       el = el.nextElementSibling;
     }
   }
 
-  return "";
+  return { motion: "", committee: "" };
 }
 
 export async function fetchAllPartyBreakdown(votering_id: string): Promise<AllPartyBreakdown> {

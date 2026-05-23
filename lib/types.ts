@@ -47,3 +47,8 @@ export interface PartyVoteBreakdown {
 }
 
 export type AllPartyBreakdown = Record<string, PartyVoteBreakdown>;
+
+export interface DocumentSummary {
+  motion: string;
+  committee: string;
+}
