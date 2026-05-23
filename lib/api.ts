@@ -83,6 +83,19 @@ function fetchDocHtml(dok_id: string): Promise<string> {
   return docHtmlCache.get(dok_id)!;
 }
 
+export function extractProposerParty(summary: string): string | null {
+  // "av [Name] m.fl. (V)" — most common form
+  let m = summary.match(/\bav\b[^(]{1,80}\(([A-ZÅÄÖ]{1,3})\)/);
+  if (m) return m[1];
+  // "[Name] m.fl. (V) efterlyser/föreslår…" — name is subject, no "av"
+  m = summary.match(/^[^(]{1,80}m\.fl\.\s*\(([A-ZÅÄÖ]{1,3})\)/);
+  if (m) return m[1];
+  // Last resort: first party code in parens in the opening sentence
+  const first = summary.split(/[.!?]/)[0];
+  m = first.match(/\(([A-ZÅÄÖ]{1,3})\)/);
+  return m ? m[1] : null;
+}
+
 export async function fetchDocumentSummary(dok_id: string, rubrik: string): Promise<string> {
   const cacheKey = `${dok_id}:${rubrik}`;
   if (summaryCache.has(cacheKey)) return summaryCache.get(cacheKey)!;

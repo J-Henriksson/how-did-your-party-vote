@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AggregatedVote, AllPartyBreakdown } from "@/lib/types";
 import { PARTIES, PARTY_MAP } from "@/constants/parties";
-import { fetchAllPartyBreakdown, fetchDocumentSummary } from "@/lib/api";
+import { fetchAllPartyBreakdown, fetchDocumentSummary, extractProposerParty } from "@/lib/api";
 
 interface VoteCardProps {
   vote: AggregatedVote;
@@ -164,6 +164,37 @@ export default function VoteCard({ vote, partyCode, onSelect, selected = false }
               <p className="text-xs text-gray-600 italic">Ingen sammanfattning tillgänglig.</p>
             )}
           </div>
+
+          {/* 1b. Parliamentary process context */}
+          {!loadingSummary && (() => {
+            const proposerParty = summary ? extractProposerParty(summary) : null;
+            const overallJa = vote.ja > vote.nej;
+            const pb = proposerParty && breakdown ? breakdown[proposerParty] : null;
+            const proposerOutcome = pb ? dominantOutcome(pb.ja, pb.nej, pb.avstar) : null;
+            const paradox = proposerOutcome && (
+              (overallJa && proposerOutcome.label !== "Ja") ||
+              (!overallJa && proposerOutcome.label !== "Nej")
+            );
+
+            if (paradox) {
+              const proposerName = PARTY_MAP[proposerParty!]?.name ?? proposerParty;
+              const theirVote = proposerOutcome!.label;
+              return (
+                <p
+                  className="text-xs rounded p-2.5 leading-relaxed"
+                  style={{ backgroundColor: "#f59e0b22", color: "#f59e0b" }}
+                >
+                  ⚠ {proposerName} föreslog detta, men röstade {theirVote} — utskottets förslag kan skilja sig från ursprungsmotionen.
+                </p>
+              );
+            }
+
+            return (
+              <p className="text-xs text-gray-500 italic leading-relaxed">
+                Omröstningarna gäller utskottets förslag, inte ursprungsmotionen. En motion kan ha ändrats av utskottet innan omröstningen.
+              </p>
+            );
+          })()}
 
           {/* 2. How parties voted */}
           <div>

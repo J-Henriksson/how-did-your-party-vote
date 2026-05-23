@@ -19,6 +19,7 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
   const [done, setDone] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCommittees, setActiveCommittees] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<"date" | "controversy">("date");
 
   useEffect(() => {
     setVotes([]);
@@ -64,12 +65,20 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return votes.filter(v => {
+    const result = votes.filter(v => {
       if (activeCommittees.size > 0 && !activeCommittees.has(committeeFromDokId(v.beteckning))) return false;
       if (q && !v.rubrik.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [votes, query, activeCommittees]);
+    if (sortBy === "controversy") {
+      result.sort((a, b) => {
+        const scoreA = (a.ja + a.nej + a.avstar) > 0 ? Math.min(a.ja, a.nej) / (a.ja + a.nej + a.avstar) : 0;
+        const scoreB = (b.ja + b.nej + b.avstar) > 0 ? Math.min(b.ja, b.nej) / (b.ja + b.nej + b.avstar) : 0;
+        return scoreB - scoreA;
+      });
+    }
+    return result;
+  }, [votes, query, activeCommittees, sortBy]);
 
   function toggleCommittee(code: string) {
     setActiveCommittees(prev => {
@@ -124,6 +133,22 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
       {/* Search + filters */}
       {votes.length > 0 && (
         <div className="flex flex-col gap-3 mb-6">
+          <div className="flex items-center gap-2">
+            {(["date", "controversy"] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setSortBy(mode)}
+                className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors duration-150"
+                style={{
+                  backgroundColor: sortBy === mode ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                  color: sortBy === mode ? "#fff" : "#6b7280",
+                  border: `1px solid ${sortBy === mode ? "rgba(255,255,255,0.25)" : "transparent"}`,
+                }}
+              >
+                {mode === "date" ? "Senaste" : "Mest splittrad"}
+              </button>
+            ))}
+          </div>
           <div className="relative w-full max-w-sm">
             <input
               ref={inputRef}
