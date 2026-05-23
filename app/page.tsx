@@ -52,8 +52,8 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left pane: header + hemicycle, fixed */}
-      <div className="w-1/2 flex flex-col px-10 pt-10 pb-6 overflow-hidden">
-        <header className="mb-6 flex-shrink-0">
+      <div className="w-1/2 flex flex-col px-6 pt-8 pb-6 overflow-hidden">
+        <header className="mb-3 flex-shrink-0">
           <h1 className="text-3xl font-bold tracking-tight mb-2">
             Hur röstade ditt parti?
           </h1>
@@ -82,7 +82,7 @@ export default function Home() {
         </header>
 
         {/* Hemicycle fills remaining vertical space */}
-        <div className="flex-1 flex items-center min-h-0">
+        <div className="flex-1 flex items-start min-h-0">
           <Hemicycle {...hemicycleProps} />
         </div>
       </div>
