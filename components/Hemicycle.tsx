@@ -85,7 +85,7 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
   return (
     <div className="w-full max-w-5xl mx-auto px-4 relative">
       <svg
-        viewBox="0 0 800 410"
+        viewBox="0 88 800 322"
         className="w-full h-auto"
         aria-label="Riksdagens hemicykel"
         onClick={() => onSelectParty(null)}
@@ -110,11 +110,14 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
 
       {tooltipParty && (
         <div
-          className="absolute left-1/2 -translate-x-1/2 bottom-2 px-3 py-1.5 rounded-lg text-sm font-medium pointer-events-none transition-opacity duration-150"
+          className="absolute left-1/2 -translate-x-1/2 bottom-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg pointer-events-none transition-opacity duration-150 text-center w-20 md:w-44"
           style={{ backgroundColor: tooltipParty.color + "33", color: "#fff", border: `1px solid ${tooltipParty.color}88` }}
         >
-          {tooltipParty.name}
-          <span className="ml-2 opacity-60 font-normal">{tooltipParty.seats} mandat</span>
+          <div className="text-xs md:text-sm font-semibold leading-tight">
+            <span className="md:hidden">{hoveredParty}</span>
+            <span className="hidden md:inline">{tooltipParty.name}</span>
+          </div>
+          <div className="text-[10px] md:text-xs opacity-60">{tooltipParty.seats} mandat</div>
         </div>
       )}
     </div>
