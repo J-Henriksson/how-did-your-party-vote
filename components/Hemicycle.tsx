@@ -104,10 +104,11 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
   const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 relative">
+    <div className="w-full max-w-5xl mx-auto px-1 lg:px-4 relative">
       <svg
         viewBox="0 88 800 322"
-        className="w-full h-auto"
+        className="w-full"
+        style={{ aspectRatio: "800/322" }}
         style={{ cursor: hoveredParty ? "pointer" : "default" }}
         aria-label="Riksdagens hemicykel"
         onMouseMove={e => setHoveredParty(nearestParty(e))}

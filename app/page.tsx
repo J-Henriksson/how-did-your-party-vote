@@ -63,11 +63,11 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-dvh overflow-hidden">
       {/* Hemicycle pane — top on mobile/tablet, left on desktop */}
-      <div className="lg:w-1/2 h-[52vh] lg:h-auto flex flex-col flex-shrink-0
-                      px-8 lg:px-2 pt-3 lg:pt-8 pb-1 lg:pb-6 overflow-hidden">
-        <header className="mb-2 lg:mb-3 flex-shrink-0">
+      <div className="lg:w-1/2 lg:h-auto flex flex-col flex-shrink-0
+                      pt-3 lg:px-2 lg:pt-8 pb-1 lg:pb-6 overflow-hidden">
+        <header className="mb-2 lg:mb-3 flex-shrink-0 px-4 lg:px-0">
           <h1 className="text-xl lg:text-3xl font-bold tracking-tight mb-1 lg:mb-2">
             Hur röstade ditt parti?
           </h1>
@@ -95,7 +95,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 flex items-start min-h-0 lg:pt-10">
+        <div className="lg:flex-1 lg:flex lg:items-start lg:min-h-0 lg:pt-10">
           <Hemicycle {...hemicycleProps} />
         </div>
       </div>
