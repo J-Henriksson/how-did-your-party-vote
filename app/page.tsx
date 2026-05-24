@@ -60,6 +60,7 @@ export default function Home() {
     selectedParty,
     onSelectParty: handleSelectParty,
     breakdown,
+    compact: !isDesktop,
   };
 
   return (
@@ -95,7 +96,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="lg:flex-1 lg:flex lg:items-start lg:min-h-0 lg:pt-10">
+        <div className="pt-3 lg:flex-1 lg:flex lg:items-start lg:min-h-0 lg:pt-10">
           <Hemicycle {...hemicycleProps} />
         </div>
       </div>

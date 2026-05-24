@@ -76,13 +76,21 @@ interface HemicycleProps {
   selectedParty: string | null;
   onSelectParty: (party: string | null) => void;
   breakdown: AllPartyBreakdown | null;
+  compact?: boolean;
 }
 
-function nearestParty(e: React.MouseEvent<SVGSVGElement>): string | null {
+// viewBox params: [minX, minY, width, height]
+const VB_DESKTOP = [0, 88, 800, 322] as const;
+const VB_COMPACT = [80, 88, 640, 319] as const;
+
+function nearestParty(
+  e: React.MouseEvent<SVGSVGElement>,
+  vb: readonly [number, number, number, number]
+): string | null {
   const svg = e.currentTarget;
   const rect = svg.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / rect.width * 800;
-  const y = (e.clientY - rect.top) / rect.height * 322 + 88;
+  const x = (e.clientX - rect.left) / rect.width * vb[2] + vb[0];
+  const y = (e.clientY - rect.top) / rect.height * vb[3] + vb[1];
 
   // Polar distance from the arc center — determines if cursor is inside the arc band
   const r = Math.hypot(x - CX, y - CY);
@@ -99,22 +107,24 @@ function nearestParty(e: React.MouseEvent<SVGSVGElement>): string | null {
   return minDist < (inBand ? 20 : SEAT_R) ? party : null;
 }
 
-export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: HemicycleProps) {
+export default function Hemicycle({ selectedParty, onSelectParty, breakdown, compact = false }: HemicycleProps) {
   const [hoveredParty, setHoveredParty] = useState<string | null>(null);
   const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
+  const vb = compact ? VB_COMPACT : VB_DESKTOP;
+  const viewBox = `${vb[0]} ${vb[1]} ${vb[2]} ${vb[3]}`;
+  const aspectRatio = `${vb[2]}/${vb[3]}`;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-1 lg:px-4 relative">
       <svg
-        viewBox="0 88 800 322"
+        viewBox={viewBox}
         className="w-full"
-        style={{ aspectRatio: "800/322" }}
-        style={{ cursor: hoveredParty ? "pointer" : "default" }}
+        style={{ aspectRatio, cursor: hoveredParty ? "pointer" : "default" }}
         aria-label="Riksdagens hemicykel"
-        onMouseMove={e => setHoveredParty(nearestParty(e))}
+        onMouseMove={e => setHoveredParty(nearestParty(e, vb))}
         onMouseLeave={() => setHoveredParty(null)}
         onClick={e => {
-          const p = nearestParty(e);
+          const p = nearestParty(e, vb);
           p ? onSelectParty(p) : onSelectParty(null);
         }}
       >
