@@ -117,7 +117,7 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
   const loading = !done && votes.length === 0;
 
   return (
-    <section className="w-full px-6 pt-6 pb-16">
+    <section className="w-full px-4 lg:px-6 pt-4 lg:pt-6 pb-16">
       {/* Header */}
       <div className="flex items-baseline gap-3 mb-1">
         {partyCode

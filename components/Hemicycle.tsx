@@ -134,14 +134,14 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
 
       {tooltipParty && (
         <div
-          className="absolute left-1/2 -translate-x-1/2 bottom-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg pointer-events-none transition-opacity duration-150 text-center w-20 md:w-44"
+          className="absolute left-1/2 -translate-x-1/2 bottom-2 px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg pointer-events-none transition-opacity duration-150 text-center w-20 lg:w-44"
           style={{ backgroundColor: tooltipParty.color + "33", color: "#fff", border: `1px solid ${tooltipParty.color}88` }}
         >
-          <div className="text-xs md:text-sm font-semibold leading-tight">
-            <span className="md:hidden">{hoveredParty}</span>
-            <span className="hidden md:inline">{tooltipParty.name}</span>
+          <div className="text-xs lg:text-sm font-semibold leading-tight">
+            <span className="lg:hidden">{hoveredParty}</span>
+            <span className="hidden lg:inline">{tooltipParty.name}</span>
           </div>
-          <div className="text-[10px] md:text-xs opacity-60">{tooltipParty.seats} mandat</div>
+          <div className="text-[10px] lg:text-xs opacity-60">{tooltipParty.seats} mandat</div>
         </div>
       )}
     </div>

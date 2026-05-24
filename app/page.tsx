@@ -11,7 +11,7 @@ const SESSIONS = ["2025/26", "2024/25", "2023/24"];
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
+    const mq = window.matchMedia("(min-width: 1024px)");
     setIsDesktop(mq.matches);
     const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
     mq.addEventListener("change", handler);
@@ -63,15 +63,15 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen overflow-hidden">
-      {/* Hemicycle pane — top on mobile, left on desktop */}
-      <div className="md:w-1/2 h-[52vh] md:h-auto flex flex-col flex-shrink-0
-                      px-8 md:px-2 pt-3 md:pt-8 pb-1 md:pb-6 overflow-hidden">
-        <header className="mb-2 md:mb-3 flex-shrink-0">
-          <h1 className="text-xl md:text-3xl font-bold tracking-tight mb-1 md:mb-2">
+    <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
+      {/* Hemicycle pane — top on mobile/tablet, left on desktop */}
+      <div className="lg:w-1/2 h-[52vh] lg:h-auto flex flex-col flex-shrink-0
+                      px-8 lg:px-2 pt-3 lg:pt-8 pb-1 lg:pb-6 overflow-hidden">
+        <header className="mb-2 lg:mb-3 flex-shrink-0">
+          <h1 className="text-xl lg:text-3xl font-bold tracking-tight mb-1 lg:mb-2">
             Hur röstade ditt parti?
           </h1>
-          <p className="hidden md:block text-gray-400 text-sm max-w-md mb-4">
+          <p className="hidden lg:block text-gray-400 text-sm max-w-md mb-4">
             Politiker säger en sak men röstar för en annan. Här ser du exakt hur varje parti röstade.
           </p>
           <div className="flex gap-2 flex-wrap">
@@ -95,13 +95,13 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 flex items-start min-h-0 md:pt-10">
+        <div className="flex-1 flex items-start min-h-0 lg:pt-10">
           <Hemicycle {...hemicycleProps} />
         </div>
       </div>
 
-      {/* Vote list pane — bottom on mobile, right on desktop */}
-      <div className="flex-1 md:w-1/2 overflow-y-auto border-t md:border-t-0 md:border-l border-white/5">
+      {/* Vote list pane — bottom on mobile/tablet, right on desktop */}
+      <div className="flex-1 lg:w-1/2 overflow-y-auto border-t lg:border-t-0 lg:border-l border-white/5">
         <VoteList
           sessions={[...activeSessions]}
           partyCode={selectedParty ?? undefined}
