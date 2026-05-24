@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Hemicycle from "@/components/Hemicycle";
 import VoteList from "@/components/VoteList";
 import { currentSession, fetchAllPartyBreakdown } from "@/lib/api";
@@ -26,6 +26,13 @@ export default function Home() {
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<AllPartyBreakdown | null>(null);
   const isDesktop = useIsDesktop();
+  const voteListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isDesktop && selectedParty !== null) {
+      voteListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [selectedParty, isDesktop]);
 
   function toggleSession(s: string) {
     setActiveSessions(prev => {
@@ -102,7 +109,7 @@ export default function Home() {
       </div>
 
       {/* Vote list pane — bottom on mobile/tablet, right on desktop */}
-      <div className="flex-1 lg:w-1/2 overflow-y-auto border-t lg:border-t-0 lg:border-l border-white/5">
+      <div ref={voteListRef} className="flex-1 lg:w-1/2 overflow-y-auto border-t lg:border-t-0 lg:border-l border-white/5">
         <VoteList
           sessions={[...activeSessions]}
           partyCode={selectedParty ?? undefined}

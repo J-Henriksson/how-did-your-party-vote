@@ -109,7 +109,8 @@ function nearestParty(
 
 export default function Hemicycle({ selectedParty, onSelectParty, breakdown, compact = false }: HemicycleProps) {
   const [hoveredParty, setHoveredParty] = useState<string | null>(null);
-  const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
+  const displayParty = compact ? selectedParty : hoveredParty;
+  const tooltipParty = displayParty ? PARTY_MAP[displayParty] : null;
   const vb = compact ? VB_COMPACT : VB_DESKTOP;
   const viewBox = `${vb[0]} ${vb[1]} ${vb[2]} ${vb[3]}`;
   const aspectRatio = `${vb[2]}/${vb[3]}`;
@@ -149,7 +150,7 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown, com
           style={{ backgroundColor: tooltipParty.color + "33", color: "#fff", border: `1px solid ${tooltipParty.color}88` }}
         >
           <div className="text-xs lg:text-sm font-semibold leading-tight">
-            <span className="lg:hidden">{hoveredParty}</span>
+            <span className="lg:hidden">{displayParty}</span>
             <span className="hidden lg:inline">{tooltipParty.name}</span>
           </div>
           <div className="text-[10px] lg:text-xs opacity-60">{tooltipParty.seats} mandat</div>
