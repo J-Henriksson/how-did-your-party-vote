@@ -1,5 +1,6 @@
 import type { AggregatedVote, AllPartyBreakdown, DocumentSummary, VotePoint } from "./types";
 import prebuiltSummaries from "./summaries.json";
+import prebuiltVotes from "./votes.json";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -63,8 +64,9 @@ interface Betankande {
   datum: string;
 }
 
-async function fetchBetankanden(session: string): Promise<Betankande[]> {
-  const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${session}&utformat=json&antal=100&from=${sessionStartDate(session)}&tom=${sessionEndDate(session)}`;
+async function fetchBetankanden(session: string, fromDate?: string): Promise<Betankande[]> {
+  const from = fromDate ?? sessionStartDate(session);
+  const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${session}&utformat=json&antal=100&from=${from}&tom=${sessionEndDate(session)}`;
   const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(`dokumentlista: ${res.status}`);
   const data = await res.json();
@@ -326,7 +328,69 @@ export function streamAllVotes(
   }
 
   (async () => {
+    const prebuilt = (prebuiltVotes as Record<string, unknown>)[session] as Array<
+      AggregatedVote & { breakdown: AllPartyBreakdown }
+    > | undefined;
+
     const collected: AggregatedVote[] = [];
+
+    if (prebuilt?.length) {
+      // Seed caches from prebuilt data so the UI renders instantly
+      for (const entry of prebuilt) {
+        const { breakdown, ...vote } = entry;
+        detailCache.set(vote.votering_id, breakdown);
+        collected.push(vote);
+      }
+      allVotesCache.set(session, collected);
+      setTimeout(() => {
+        if (signal.aborted) return;
+        for (const v of collected) onVote(v);
+      }, 0);
+
+      // Fetch only betänkanden newer than the snapshot to pick up recent votes
+      const generatedAt = (prebuiltVotes as unknown as Record<string, string>).generatedAt;
+      try {
+        const newBets = await fetchBetankanden(session, generatedAt);
+        const newPoints: VotePoint[] = (await Promise.all(newBets.map(fetchVotePoints))).flat()
+          .filter(p => !detailCache.has(p.votering_id));
+
+        if (newPoints.length === 0) {
+          if (!signal.aborted) onDone();
+          return;
+        }
+
+        let remaining = newPoints.length;
+        const finish = () => { if (--remaining === 0 && !signal.aborted) onDone(); };
+
+        for (const point of newPoints) {
+          fetchAllPartyBreakdown(point.votering_id)
+            .then(breakdown => {
+              let ja = 0, nej = 0, avstar = 0, franvarande = 0;
+              for (const b of Object.values(breakdown)) {
+                ja += b.ja; nej += b.nej; avstar += b.avstar; franvarande += b.franvarande;
+              }
+              const vote: AggregatedVote = {
+                votering_id: point.votering_id,
+                beteckning: point.dok_id,
+                rubrik: point.rubrik,
+                titel: point.titel,
+                datum: point.datum,
+                ja, nej, avstar, franvarande,
+              };
+              collected.push(vote);
+              allVotesCache.set(session, collected);
+              if (!signal.aborted) onVote(vote);
+            })
+            .catch(() => {})
+            .finally(finish);
+        }
+      } catch {
+        if (!signal.aborted) onDone();
+      }
+      return;
+    }
+
+    // No prebuilt data — full fetch fallback
     let totalPoints = 0;
     let completedPoints = 0;
     let pointsFinalised = false;
@@ -334,7 +398,6 @@ export function streamAllVotes(
     const checkDone = () => {
       if (pointsFinalised && completedPoints === totalPoints) {
         allVotesCache.set(session, collected);
-        // Only notify the UI if the user hasn't switched away
         if (!signal.aborted) onDone();
       }
     };
@@ -363,15 +426,11 @@ export function streamAllVotes(
 
     try {
       const betankanden = await fetchBetankanden(session);
-
-      // Always process everything regardless of abort so the cache is fully
-      // populated — switching back to this session will then be instant.
       await Promise.all(betankanden.map(async bet => {
         const points = await fetchVotePoints(bet);
         totalPoints += points.length;
         for (const point of points) startBreakdownFetch(point);
       }));
-
       pointsFinalised = true;
       if (totalPoints === 0) { if (!signal.aborted) onDone(); return; }
       checkDone();
@@ -392,6 +451,25 @@ export function streamPartyVotes(
     setTimeout(() => {
       if (signal.aborted) return;
       for (const v of cached) onVote(v);
+      onDone();
+    }, 0);
+    return;
+  }
+
+  // If allVotesCache is pre-warmed (from prebuilt JSON), filter instantly from it
+  if (allVotesCache.has(session)) {
+    const all = allVotesCache.get(session)!;
+    const filtered: AggregatedVote[] = [];
+    for (const v of all) {
+      const b = detailCache.get(v.votering_id)?.[party];
+      if (b && (b.ja + b.nej + b.avstar + b.franvarande) > 0) {
+        filtered.push({ ...v, ja: b.ja, nej: b.nej, avstar: b.avstar, franvarande: b.franvarande });
+      }
+    }
+    streamCache.set(cacheKey, filtered);
+    setTimeout(() => {
+      if (signal.aborted) return;
+      for (const v of filtered) onVote(v);
       onDone();
     }, 0);
     return;
