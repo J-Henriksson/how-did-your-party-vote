@@ -78,6 +78,27 @@ interface HemicycleProps {
   breakdown: AllPartyBreakdown | null;
 }
 
+function nearestParty(e: React.MouseEvent<SVGSVGElement>): string | null {
+  const svg = e.currentTarget;
+  const rect = svg.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width * 800;
+  const y = (e.clientY - rect.top) / rect.height * 322 + 88;
+
+  // Polar distance from the arc center — determines if cursor is inside the arc band
+  const r = Math.hypot(x - CX, y - CY);
+  const inBand = r >= ROW_RADII[0] - SEAT_R && r <= ROW_RADII[ROW_RADII.length - 1] + SEAT_R && y <= CY + SEAT_R;
+
+  let minDist = Infinity;
+  let party: string | null = null;
+  for (const seat of ALL_SEATS) {
+    const d = Math.hypot(seat.x - x, seat.y - y);
+    if (d < minDist) { minDist = d; party = seat.party; }
+  }
+  // Within the arc band: generous threshold covers horizontal gaps between seats
+  // Outside the band (approaching from above/below/outside): must nearly touch a seat
+  return minDist < (inBand ? 20 : SEAT_R) ? party : null;
+}
+
 export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: HemicycleProps) {
   const [hoveredParty, setHoveredParty] = useState<string | null>(null);
   const tooltipParty = hoveredParty ? PARTY_MAP[hoveredParty] : null;
@@ -87,11 +108,16 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
       <svg
         viewBox="0 88 800 322"
         className="w-full h-auto"
+        style={{ cursor: hoveredParty ? "pointer" : "default" }}
         aria-label="Riksdagens hemicykel"
-        onClick={() => onSelectParty(null)}
+        onMouseMove={e => setHoveredParty(nearestParty(e))}
         onMouseLeave={() => setHoveredParty(null)}
+        onClick={e => {
+          const p = nearestParty(e);
+          p ? onSelectParty(p) : onSelectParty(null);
+        }}
       >
-        <rect x="0" y="0" width="800" height="410" fill="transparent" onMouseEnter={() => setHoveredParty(null)} />
+        <rect x="0" y="0" width="800" height="410" fill="transparent" />
 
         {ALL_SEATS.map((seat, i) => (
           <circle
@@ -102,8 +128,6 @@ export default function Hemicycle({ selectedParty, onSelectParty, breakdown }: H
             fill={seat.color}
             opacity={seatOpacity(seat, breakdown, selectedParty)}
             style={{ transition: "opacity 0.3s", cursor: "pointer" }}
-            onMouseEnter={() => setHoveredParty(seat.party)}
-            onClick={e => { e.stopPropagation(); onSelectParty(seat.party); }}
           />
         ))}
       </svg>
