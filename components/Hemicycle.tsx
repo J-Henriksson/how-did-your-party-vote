@@ -80,7 +80,7 @@ interface HemicycleProps {
 }
 
 // viewBox params: [minX, minY, width, height]
-const VB_DESKTOP = [0, 88, 800, 322] as const;
+const VB_DESKTOP = [80, 88, 640, 319] as const;
 const VB_COMPACT = [80, 88, 640, 319] as const;
 
 function nearestParty(
