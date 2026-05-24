@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   title: "Hur röstade ditt parti?",
   description: "Se hur varje riksdagsparti röstar – ingen spin, bara data.",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "./icon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
