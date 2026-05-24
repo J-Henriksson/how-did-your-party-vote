@@ -1,6 +1,35 @@
 import type { AggregatedVote, AllPartyBreakdown, DocumentSummary, VotePoint } from "./types";
+import prebuiltSummaries from "./summaries.json";
 
 const BASE = "https://data.riksdagen.se";
+
+function makeQueue(limit: number) {
+  let active = 0;
+  const queue: (() => void)[] = [];
+  return function run<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const attempt = () => {
+        active++;
+        task().then(resolve, reject).finally(() => { active--; queue.shift()?.(); });
+      };
+      active < limit ? attempt() : queue.push(attempt);
+    });
+  };
+}
+const fetchQueue = makeQueue(8);
+
+async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetchQueue(() => fetch(url));
+      if (res.ok || i === retries) return res;
+    } catch (e) {
+      if (i === retries) throw e;
+    }
+    await new Promise(r => setTimeout(r, 300 * (i + 1)));
+  }
+  throw new Error("fetch failed");
+}
 
 export function currentSession(): string {
   const now = new Date();
@@ -36,7 +65,7 @@ interface Betankande {
 
 async function fetchBetankanden(session: string): Promise<Betankande[]> {
   const url = `${BASE}/dokumentlista/?doktyp=bet&rm=${session}&utformat=json&antal=100&from=${sessionStartDate(session)}&tom=${sessionEndDate(session)}`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(`dokumentlista: ${res.status}`);
   const data = await res.json();
   const docs = data?.dokumentlista?.dokument ?? [];
@@ -50,7 +79,7 @@ async function fetchBetankanden(session: string): Promise<Betankande[]> {
 
 async function fetchVotePoints(bet: Betankande): Promise<VotePoint[]> {
   const url = `${BASE}/utskottsforslag/${bet.dok_id}/json`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) return [];
   const data = await res.json();
   const forslag = data?.utskottsforslag?.dokutskottsforslag?.utskottsforslag ?? [];
@@ -74,7 +103,7 @@ const docHtmlCache = new Map<string, Promise<string>>();
 
 function fetchDocHtml(dok_id: string): Promise<string> {
   if (!docHtmlCache.has(dok_id)) {
-    const p = fetch(`${BASE}/dokument/${dok_id}/json`)
+    const p = fetchWithRetry(`${BASE}/dokument/${dok_id}/json`)
       .then(res => res.ok ? res.json() : null)
       .then(data => (data?.dokumentstatus?.dokument?.html as string) ?? "")
       .catch(() => "");
@@ -96,7 +125,10 @@ export function extractProposerParty(summary: string): string | null {
   return m ? m[1] : null;
 }
 
-export async function fetchDocumentSummary(dok_id: string, rubrik: string): Promise<DocumentSummary> {
+export async function fetchDocumentSummary(votering_id: string, dok_id: string, rubrik: string): Promise<DocumentSummary> {
+  const prebuilt = (prebuiltSummaries as Record<string, string>)[votering_id];
+  if (prebuilt) return { committee: prebuilt, motion: "" };
+
   const cacheKey = `${dok_id}:${rubrik}`;
   if (summaryCache.has(cacheKey)) return summaryCache.get(cacheKey)!;
 
@@ -121,6 +153,8 @@ function normalize(s: string): string {
 
 
 
+const PARA_SEL = ".NormalIndent, .Brödtext, .Brodtext, .Normal, p";
+
 // Within a section's elements, find a R3/R4 subsection heading by name and return its content
 function extractSubsection(section: Element[], subheading: string): string {
   for (let i = 0; i < section.length; i++) {
@@ -134,9 +168,9 @@ function extractSubsection(section: Element[], subheading: string): string {
     for (let j = i + 1; j < section.length; j++) {
       const next = section[j];
       if (next.matches?.(".R3,.R4") || next.querySelector?.(".R3,.R4")) break;
-      const candidates = next.matches?.(".NormalIndent,p")
+      const candidates = next.matches?.(PARA_SEL)
         ? [next]
-        : Array.from(next.querySelectorAll(".NormalIndent, p"));
+        : Array.from(next.querySelectorAll(PARA_SEL));
       for (const p of candidates) {
         const t = p.textContent?.trim();
         if (t && t.length > 20) return truncateSentences(t, 280);
@@ -153,7 +187,8 @@ function extractBothSections(doc: Document, rubrik: string): DocumentSummary {
   const heading =
     headings.find(h => normalize(h.textContent ?? "") === target) ??
     headings.find(h => normalize(h.textContent ?? "").includes(target)) ??
-    headings.find(h => target.includes(normalize(h.textContent ?? "").replace(/\s+/g, " ")));
+    headings.find(h => target.includes(normalize(h.textContent ?? "").replace(/\s+/g, " "))) ??
+    headings.find(h => target.length >= 20 && normalize(h.textContent ?? "").replace(/\s+/g, " ").startsWith(target.slice(0, 20)));
 
   if (heading) {
     const anchor = heading.parentElement?.tagName === "DIV" ? heading.parentElement : heading;
@@ -185,14 +220,22 @@ function extractBothSections(doc: Document, rubrik: string): DocumentSummary {
       return { motion: motText, committee: committeeText || korthText };
     }
 
-    // Last resort: first substantial paragraph goes to motion (not committee — could be anything)
+    // Last resort: first substantial paragraph — route to committee (more useful than motion slot)
     for (const el of section) {
-      const candidates = el.matches?.(".NormalIndent,p") ? [el] : Array.from(el.querySelectorAll(".NormalIndent, p"));
+      const candidates = el.matches?.(PARA_SEL) ? [el] : Array.from(el.querySelectorAll(PARA_SEL));
       for (const p of candidates) {
         const t = p.textContent?.trim();
-        if (t && t.length > 40) return { motion: truncateSentences(t, 280), committee: "" };
+        if (t && t.length > 40) return { motion: motText, committee: truncateSentences(t, 280) };
       }
     }
+  }
+
+  // Document-wide Normalruta ("i korthet") — present in most betänkanden, reliable committee summary
+  const allNormalruta = Array.from(doc.querySelectorAll(".Normalruta"))
+    .map(p => p.textContent?.trim())
+    .filter((t): t is string => !!t && t.length > 40);
+  if (allNormalruta.length > 0) {
+    return { motion: "", committee: truncateSentences(allNormalruta[0], 280) };
   }
 
   // No h2 match — try R3/R4 subsection heading (motion slot, provenance unclear)
@@ -225,7 +268,7 @@ export async function fetchAllPartyBreakdown(votering_id: string): Promise<AllPa
   if (detailCache.has(votering_id)) return detailCache.get(votering_id)!;
 
   const url = `${BASE}/votering/${votering_id}/json`;
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(`votering: ${res.status}`);
   const data = await res.json();
   const records = data?.votering?.dokvotering?.votering ?? [];
