@@ -146,7 +146,7 @@ export default function VoteList({ sessions, partyCode, selectedVoteId, onSelect
                   border: `1px solid ${sortBy === mode ? "rgba(255,255,255,0.25)" : "transparent"}`,
                 }}
               >
-                {mode === "date" ? "Senaste" : "Mest splittrad"}
+                {mode === "date" ? "Senaste" : "Mest kontroversiella"}
               </button>
             ))}
           </div>

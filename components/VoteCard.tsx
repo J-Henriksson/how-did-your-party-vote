@@ -111,7 +111,7 @@ export default function VoteCard({ vote, partyCode, onSelect, selected = false }
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="text-xs text-gray-600 hover:text-gray-300 transition-colors"
+            className="text-xs text-blue-400 hover:text-blue-300 transition-colors [text-shadow:0_0_8px_rgba(96,165,250,0.7)]"
           >
             Läs mer →
           </a>
